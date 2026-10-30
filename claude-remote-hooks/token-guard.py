@@ -98,6 +98,9 @@ def check_ranges(cmd, cwd):
 #   branch   task branch regex, group 1 = the task id: a push needs the branch claimed on GitHub first, and a builder
 #            prompt `task <owner/repo>#<id>` (or the repo's `builder` phrase) needs `branch <b> claim <sha>`.
 #   from     the branch a claim is cut from (default: bases[0]).
+#   closes   "issue": a PR body that closes, fixes or resolves #N must come from a head branch matching `branch` with
+#            task id N (2026-10-30: an ad-hoc session could build issue N on any branch; the queue and the claim never
+#            saw it and the nightly scheduler rebuilt the issue).
 HOOK_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULTS_FILE = os.environ.get("TOKEN_GUARD_DEFAULTS") or os.path.join(HOOK_DIR, "routine-policy.defaults.json")
 POLICY_FILE = os.environ.get("TOKEN_GUARD_POLICY") or os.path.join(HOOK_DIR, "routine-policy.json")
@@ -136,6 +139,7 @@ PR_BASES = {r: tuple(p["bases"]) for r, p in POLICY.items()}
 STATUS = {r: p["status"] for r, p in POLICY.items() if p.get("status")}
 TASK_LINE_REPOS = tuple(r for r, p in POLICY.items() if p.get("task") == "T-NNN")
 CLAIMED = {r: p["branch"] for r, p in POLICY.items() if p.get("branch")}
+CLOSES_ISSUE = tuple(r for r, p in POLICY.items() if p.get("closes") == "issue" and p.get("branch"))
 RUNNER = {p["status"]: p["runner"] for p in POLICY.values() if p.get("status") and p.get("runner")}
 TASK_LINE_HELP = "a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice)"
 
@@ -241,6 +245,40 @@ def check_pr_create(cmd, cwd):
     if missing:
         deny(f"the PR body for {repo} needs: {'; '.join(missing)}. Write it to a file, then `--body-file`."
              + task_format(repo))
+    if repo in CLOSES_ISSUE:
+        check_issue_head(cmd, cwd, repo, body)
+
+
+ISSUE_RE = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)\b")
+
+
+def head_of(cmd, cwd):
+    """The PR's head branch: `--head`/`-H`, else the branch checked out in the dir cmd cds into (or cwd); "" if unknown."""
+    m = re.search(r"(?<![\w-])(?:--head|-H)[ =]['\"]?([^\s'\"]+)", cmd)
+    if m:
+        return m.group(1).split(":")[-1]
+    c = re.search(r"\bcd\s+(['\"]?)([^\s;&|'\"]+)\1", cmd)
+    d = os.path.join(cwd, os.path.expanduser(c.group(2))) if c else cwd
+    try:
+        return subprocess.run(["git", "-C", d, "symbolic-ref", "--short", "-q", "HEAD"],
+                              capture_output=True, text=True, timeout=2).stdout.strip()
+    except Exception:
+        return ""  # allow-failopen: an unknown head is refused below (fail closed)
+
+
+def check_issue_head(cmd, cwd, repo, body):
+    issues = sorted(set(ISSUE_RE.findall(body)), key=int)
+    if not issues:
+        return
+    head = head_of(cmd, cwd)
+    m = re.search(CLAIMED[repo], head)
+    want = re.sub(r"\(\\d\+\)", issues[0], CLAIMED[repo]).lstrip("^").rstrip("-") + "-<slug>"
+    if not head:
+        deny(f"this PR closes #{issues[0]} in {repo} but its head branch is unknown: add `--head {want}`.")
+    if not m or any(i != m.group(1) for i in issues):
+        deny(f"this PR closes #{', #'.join(issues)} in {repo} from `{head}`; an issue PR comes from its claimed task "
+             f"branch `{want}` (oplify-task.md), or the nightly queue rebuilds it. Claim it with "
+             f"`{claim_cmd(repo, want)}` (exit 3: another session holds it), push there, then open the PR.")
 
 
 # Claim before push (2026-10-29: feat/t247-disputes and feat/t247-ownership-disputes were both built; the second

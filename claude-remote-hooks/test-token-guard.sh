@@ -6,7 +6,8 @@ cat >"$T/defaults.json" <<'JSON'
 {"repos": {
   "acme/task-api": {"bases": ["chore/integration"], "status": "local-ci", "runner": "ci-run", "task": "T-NNN",
     "format": "task-contract.md step 7", "branch": "^feat/t(\\d+)-", "builder": "Task API, task T-?(\\d+)\\b"},
-  "widgets-co/widgets-api": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production"},
+  "widgets-co/widgets-api": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production",
+    "closes": "issue"},
   "widgets-co/widgets-app": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production"}}}
 JSON
 export TOKEN_GUARD_DEFAULTS="$T/defaults.json" TOKEN_GUARD_POLICY="$T/no-policy.json"
@@ -87,6 +88,24 @@ x
 run deny  "$(b "gh pr create -R widgets-co/widgets-api --base beta --title t --body-file oldwidgets.md")" "widgets PR without the three sections refused"
 run allow "$(b "gh pr create -R widgets-co/widgets-api --base production --head beta --title promote --body x")" "widgets promotion PR to production"
 run allow "$(b "gh pr create -R someone/other --base main --title t --body x")" "other repos untouched"
+# closes=issue (2026-10-30): a PR that closes issue #N comes from task/issue-<N>-*, the branch the queue and the claim see
+printf '## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\nCloses #12\n' >"$T/closes12.md"
+printf 'fixes  #12\n## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\n' >"$T/fixes12.md"
+printf '## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\n' >"$T/noissue.md"
+OPA=widgets-co/widgets-api
+run deny  "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file closes12.md")" "issue PR from an off-contract branch refused"
+run deny  "$(b "gh pr create -R $OPA --base beta --head task/issue-13-login --title t --body-file fixes12.md")" "issue PR from another issue's branch refused"
+run deny  "$(b "gh pr create -R $OPA --base beta --head task/issue-120-x --title t --body-file closes12.md")" "issue-120 branch does not close #12"
+run deny  "$(b "gh pr create -R $OPA --base beta --title t --body-file closes12.md")" "issue PR with no --head outside a git dir refused"
+run allow "$(b "gh pr create -R $OPA --base beta --head task/issue-12-login --title t --body-file closes12.md")" "issue PR from task/issue-12-* allowed"
+run allow "$(b "gh pr create -R $OPA --base beta -H task/issue-12-login --title t --body-file fixes12.md")" "issue PR via -H allowed"
+run allow "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file noissue.md")" "PR closing no issue keeps any branch"
+run allow "$(b "gh pr create -R widgets-co/widgets-app --base beta --head fix/login --title t --body-file closes12.md")" "repo without closes= untouched"
+git init -q -b task/issue-12-login "$T/op12" && git init -q -b fix/login "$T/opfix"
+run allow "$(b "cd $T/op12 && gh pr create -R $OPA --base beta --title t --body-file $T/closes12.md")" "issue PR with no --head from a task/issue-12-* checkout allowed"
+run deny  "$(b "cd $T/opfix && gh pr create -R $OPA --base beta --title t --body-file $T/closes12.md")" "issue PR with no --head from a fix/* checkout refused"
+o=$(printf '%s' "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file closes12.md")" | python3 "$H" 2>&1 >/dev/null)
+grep -q 'claim-branch widgets-co/widgets-api task/issue-12-<slug> production' <<<"$o" && echo "ok   msg   issue refusal names the claim command" || { echo "FAIL msg   issue refusal: $o"; fail=1; }
 run wrap  "$(b "gh pr merge 84 -R $BH --squash --delete-branch")" "merge gets a live base check"
 run allow "$(b "gh pr view 84 -R $BH")" "pr view untouched"
 run deny  "$(b "gh api repos/$BH/statuses/abc -f state=success -f context=local-ci")" "agents cannot post local-ci themselves"

@@ -6,7 +6,7 @@ repo gets PR, claim and dispatch rules by having a GUARD_REPOS line in a claude-
 guard. --install also writes routine-policy.defaults.json, the fail-closed fallback the guard reads when the main file
 is broken. Confs come from $ROUTINE_CONF_DIR, else $AGENT_OVERLAY_DIR/claude-routines (examples/ shows the format).
 Each conf may set
-    GUARD_REPOS=("owner/repo|bases=<b1 b2…>|status=<ctx>|runner=<cmd>|task=T-NNN|format=<text>|branch=<regex>|from=<base>|builder=<regex>" …)
+    GUARD_REPOS=("owner/repo|bases=<b1 b2…>|status=<ctx>|runner=<cmd>|task=T-NNN|format=<text>|branch=<regex>|from=<base>|builder=<regex>|closes=issue" …)
   bases    PR targets, space separated; the first is the only one a session may merge into (required)
   status   commit status that must be success on the PR head before a merge (e.g. local-ci)
   runner   the command that posts that status (`<runner> <pr>`); sessions may not post it by hand
@@ -15,6 +15,7 @@ Each conf may set
   branch   task branch regex, group 1 = the task id (e.g. ^task/issue-(\\d+)-): pushes and builders need a claim
   from     the base a claim is cut from (default: the first of bases)
   builder  an older builder-prompt phrase, group 1 = task id, accepted besides `task <owner/repo>#<id>`
+  closes   issue: a PR body closing #N must come from a branch= head with task id N
 Fields are `key=value` split on `|`, so a regex cannot contain `|`.
 
   routine-policy             print the JSON (exit 1 with the reason on a bad line)
@@ -45,7 +46,7 @@ CONFS = ENV.get("ROUTINE_CONF_DIR") or (os.path.join(ENV["AGENT_OVERLAY_DIR"], "
                                         if ENV.get("AGENT_OVERLAY_DIR") else "")
 LAPTOP = os.path.expanduser("~/.claude/hooks/routine-policy.json")
 REMOTE = "/opt/agent-rules/hooks/routine-policy.json"
-KEYS = {"bases", "status", "runner", "task", "format", "branch", "from", "builder"}
+KEYS = {"bases", "status", "runner", "task", "format", "branch", "from", "builder", "closes"}
 
 
 def conf_lines(path):
@@ -84,6 +85,8 @@ def parse(line, where):
                 sys.exit(f"routine-policy: {where}: {k}= needs a group for the task id")
     if "runner" in p and "status" not in p:
         sys.exit(f"routine-policy: {where}: runner= only means something with status=")
+    if p.get("closes", "issue") != "issue" or ("closes" in p and "branch" not in p):
+        sys.exit(f"routine-policy: {where}: closes= takes only issue, and needs branch=")
     if "from" in p and "branch" not in p:
         sys.exit(f"routine-policy: {where}: from= only means something with branch=")
     return repo, p
