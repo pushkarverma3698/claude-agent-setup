@@ -1,0 +1,10 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# The time comes from a drop-in per group (routine-verdict@<group>.timer.d/schedule.conf).
+[Unit]
+Description=Schedule for the routine PR verdict (%i)
+
+[Timer]
+Persistent=true
+
+[Install]
+WantedBy=timers.target

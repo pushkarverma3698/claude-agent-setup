@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# branch-sweep: delete stale git branches, after backing every one of them up.
+#   branch-sweep remote <owner/repo> [--apply]   GitHub branches (mirror clone kept as the backup)
+#   branch-sweep local  <repo path>  [--apply]   local branches (git bundle kept as the backup)
+# Keeps: the default branch, main|master|beta|production|staging|develop|chore/scaffold-from-reference,
+# branches with an open PR, branches checked out in a worktree, and anything committed in the last
+# KEEP_HOURS (default 12) so live agents keep their work. Dry run unless --apply.
+# Restore a branch: git -C <backup>.git push origin <branch>  (remote)  ·  git fetch <bundle> <branch>:<branch>  (local)
+set -euo pipefail
+mode=${1:?remote|local}; target=${2:?owner/repo or path}; apply=${3:-}
+KEEP_HOURS=${KEEP_HOURS:-12}
+BACKUP=${BRANCH_SWEEP_BACKUP:-$HOME/.claude/backups/branch-sweep-$(date +%F)}
+KEEP_RE='^(main|master|beta|production|staging|develop|development|chore/scaffold-from-reference)$'
+cutoff=$(( $(date +%s) - KEEP_HOURS * 3600 ))
+mkdir -p "$BACKUP"
+
+epoch() { # ISO-8601 → epoch, GNU or BSD date
+  date -d "$1" +%s 2>/dev/null || date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s
+}
+
+if [ "$mode" = remote ]; then
+  repo=$target; owner=${repo%/*}; name=${repo#*/}
+  default=$(gh api "repos/$repo" --jq .default_branch)
+  open=$(gh pr list -R "$repo" --state open --limit 500 --json headRefName --jq '.[].headRefName')
+  rows=$(gh api graphql --paginate -f owner="$owner" -f name="$name" -f query='
+    query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){
+      refs(refPrefix:"refs/heads/",first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+        nodes{name target{... on Commit{committedDate}}}}}}' \
+    --jq '.data.repository.refs.nodes[]|"\(.name)\t\(.target.committedDate)"')
+  del=()
+  while IFS=$'\t' read -r b d; do
+    [ -n "$b" ] || continue
+    if [ "$b" = "$default" ] || [[ $b =~ $KEEP_RE ]] || grep -qxF "$b" <<<"$open" || [ "$(epoch "$d")" -gt "$cutoff" ]; then
+      continue
+    fi
+    del+=("$b")
+  done <<<"$rows"
+  echo "$repo: $(wc -l <<<"$rows" | tr -d ' ') branches, ${#del[@]} to delete"
+  [ "$apply" = --apply ] || { printf '  %s\n' "${del[@]:0:15}"; exit 0; }
+  [ ${#del[@]} -gt 0 ] || exit 0
+  m="$BACKUP/${owner}__${name}.git"
+  if [ -d "$m" ]; then git -C "$m" remote update --prune >/dev/null 2>&1; else git clone -q --mirror "https://github.com/$repo.git" "$m"; fi
+  for b in "${del[@]}"; do git -C "$m" rev-parse -q --verify "refs/heads/$b" >/dev/null || { echo "  NOT BACKED UP, kept: $b"; continue; }
+    gh api -X DELETE "repos/$repo/git/refs/heads/$b" >/dev/null 2>&1 && echo "  deleted $b" || echo "  refused: $b (protected?)"
+  done
+  echo "  backup: $m"
+else
+  dir=$target; git -C "$dir" rev-parse --git-dir >/dev/null
+  git -C "$dir" worktree prune
+  git -C "$dir" fetch -q --prune origin 2>/dev/null || true
+  url=$(git -C "$dir" remote get-url origin 2>/dev/null | sed -E 's#.*github.com[:/]##; s#\.git$##' || true)
+  open=""; [ -n "$url" ] && open=$(gh pr list -R "$url" --state open --limit 500 --json headRefName --jq '.[].headRefName' 2>/dev/null || true)
+  default=$(git -C "$dir" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)
+  used=$(git -C "$dir" worktree list --porcelain | sed -n 's#^branch refs/heads/##p')
+  del=()
+  while IFS=$'\t' read -r b t; do
+    if [ "$b" = "$default" ] || [[ $b =~ $KEEP_RE ]] || grep -qxF "$b" <<<"$used" || grep -qxF "$b" <<<"$open" || [ "$t" -gt "$cutoff" ]; then
+      continue
+    fi
+    del+=("$b")
+  done < <(git -C "$dir" for-each-ref refs/heads --format='%(refname:short)%09%(committerdate:unix)')
+  echo "$dir: ${#del[@]} local branches to delete"
+  [ "$apply" = --apply ] || { printf '  %s\n' "${del[@]:0:15}"; exit 0; }
+  [ ${#del[@]} -gt 0 ] || exit 0
+  bundle="$BACKUP/$(basename "$(git -C "$dir" rev-parse --show-toplevel)")-local-$(hostname -s).bundle"
+  git -C "$dir" bundle create -q "$bundle" "${del[@]/#/refs/heads/}"
+  git -C "$dir" bundle verify -q "$bundle" >/dev/null 2>&1 || { echo "  bundle failed, nothing deleted"; exit 1; }
+  git -C "$dir" branch -q -D "${del[@]}"
+  echo "  deleted ${#del[@]}; backup: $bundle"
+fi

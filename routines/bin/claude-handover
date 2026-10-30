@@ -1,0 +1,32 @@
+#!/bin/bash
+# claude-handover <session-id> <main|alt|alt2>: continue a Claude session under the other account, so it
+# shows up (and answers) in that account's Claude app. Transcripts are shared on disk through the
+# linked projects/ dir; this resumes one in the background, in its own directory, with Remote Control.
+# <session-id>: the local UUID or a prefix of it, session_… from the app URL, or cse_…
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+set -euo pipefail
+[ "$(id -un)" = claude-agent ] || exec sudo -n -u claude-agent -H "$0" "$@"
+[ $# -eq 2 ] || { echo "usage: claude-handover <session-id> <main|alt|alt2>" >&2; exit 64; }
+want=$1 to=$2
+P=/home/claude-agent/.claude/projects
+shopt -s nullglob
+case "$want" in
+  session_*|cse_*) files=($(grep -lF "cse_${want#*_}" "$P"/*/*.jsonl || true)) ;;
+  *) [[ "$want" =~ ^[0-9a-f-]{6,}$ ]] || { echo "claude-handover: '$want' is not a session id" >&2; exit 64; }
+     files=("$P"/*/"$want"*.jsonl) ;;
+esac
+[ ${#files[@]} -gt 0 ] || { echo "claude-handover: no transcript for $want under $P" >&2; exit 1; }
+f=$(ls -t "${files[@]}" | head -1)
+[ ${#files[@]} -eq 1 ] || echo "note: ${#files[@]} transcripts match $want; using the newest, $(basename "$f" .jsonl)"
+sid=$(basename "$f" .jsonl)
+cwd=$(jq -r 'select(.cwd != null) | .cwd' "$f" | tail -1)
+[ -n "$cwd" ] || { echo "claude-handover: transcript $sid records no directory" >&2; exit 1; }
+[ -d "$cwd" ] || { echo "claude-handover: $cwd is gone (worktree removed); nothing to continue in" >&2; exit 1; }
+source /usr/local/bin/claude-profile-env "$to"
+bgd_ready "$to"
+cd "$cwd"
+label="handover: $(basename "$cwd" | cut -c1-30) $(TZ=Europe/Amsterdam date '+%m-%d %H:%M')"
+out=$(timeout 90 "$claude" --bg --resume "$sid" -n "$label" --remote-control "$label" </dev/null 2>&1) || {
+  printf '%s\n' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' >&2; echo "claude-handover: resume failed" >&2; exit 1; }
+printf '%s\n' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | grep -vE '^\s*claude (agents|attach|logs|stop)' || true
+echo "handed $sid to $to as \"$label\" (in $cwd); open it in that account's Claude app"

@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""routine-policy — build the guard's per-repo rules from the routine confs (2026-10-30).
+
+token-guard.py reads routine-policy.json next to itself (laptop ~/.claude/hooks/, VPS /opt/agent-rules/hooks/), so a
+repo gets PR, claim and dispatch rules by having a GUARD_REPOS line in a claude-routines/*.conf, not by an edit to the
+guard. --install also writes routine-policy.defaults.json, the fail-closed fallback the guard reads when the main file
+is broken. Confs come from $ROUTINE_CONF_DIR, else $AGENT_OVERLAY_DIR/claude-routines (examples/ shows the format).
+Each conf may set
+    GUARD_REPOS=("owner/repo|bases=<b1 b2…>|status=<ctx>|runner=<cmd>|task=T-NNN|format=<text>|branch=<regex>|from=<base>|builder=<regex>" …)
+  bases    PR targets, space separated; the first is the only one a session may merge into (required)
+  status   commit status that must be success on the PR head before a merge (e.g. local-ci)
+  runner   the command that posts that status (`<runner> <pr>`); sessions may not post it by hand
+  task     T-NNN: PR bodies carry `Closes T-NNN` / `Part of T-NNN` + `Left:` and the task format (checklist, Spec refs, Risk)
+  format   where that format is written down, quoted in refusals (e.g. "task-contract.md step 7")
+  branch   task branch regex, group 1 = the task id (e.g. ^task/issue-(\\d+)-): pushes and builders need a claim
+  from     the base a claim is cut from (default: the first of bases)
+  builder  an older builder-prompt phrase, group 1 = task id, accepted besides `task <owner/repo>#<id>`
+Fields are `key=value` split on `|`, so a regex cannot contain `|`.
+
+  routine-policy             print the JSON (exit 1 with the reason on a bad line)
+  routine-policy --install   write it to the laptop hook dir and to $AGENT_RULES_HOST (both files)
+"""
+import glob, json, os, re, subprocess, sys, tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def agent_env():
+    """KEY=VALUE lines of ~/.config/claude-agent-setup/env (AGENT_SETUP_ENV overrides); the environment wins."""
+    env = {}
+    try:
+        with open(os.environ.get("AGENT_SETUP_ENV") or os.path.expanduser("~/.config/claude-agent-setup/env")) as fh:
+            for ln in fh:
+                k, eq, v = ln.strip().partition("=")
+                if eq and re.fullmatch(r"[A-Z_][A-Z0-9_]*", k):
+                    env[k] = os.path.expanduser(v.split(" #")[0].strip().strip("'\""))
+    except OSError:
+        pass
+    env.update({k: v for k, v in os.environ.items() if k in env or k.startswith("AGENT_") or k == "ROUTINE_CONF_DIR"})
+    return env
+
+
+ENV = agent_env()
+CONFS = ENV.get("ROUTINE_CONF_DIR") or (os.path.join(ENV["AGENT_OVERLAY_DIR"], "claude-routines")
+                                        if ENV.get("AGENT_OVERLAY_DIR") else "")
+LAPTOP = os.path.expanduser("~/.claude/hooks/routine-policy.json")
+REMOTE = "/opt/agent-rules/hooks/routine-policy.json"
+KEYS = {"bases", "status", "runner", "task", "format", "branch", "from", "builder"}
+
+
+def conf_lines(path):
+    """GUARD_REPOS entries of one conf, read the way claude-routine reads it (bash source)."""
+    out = subprocess.run(["bash", "-c", 'source "$1" >/dev/null && for x in "${GUARD_REPOS[@]}"; do printf "%s\\0" "$x"; done',
+                          "_", path], capture_output=True, text=True, timeout=10)
+    if out.returncode:
+        sys.exit(f"routine-policy: {path} does not source: {out.stderr.strip()}")
+    return [x for x in out.stdout.split("\0") if x]
+
+
+def parse(line, where):
+    repo, *fields = line.split("|")
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
+        sys.exit(f"routine-policy: {where}: `{repo}` is not owner/repo")
+    p = {}
+    for f in fields:
+        k, eq, v = f.partition("=")
+        if not eq or k not in KEYS or k in p:
+            sys.exit(f"routine-policy: {where}: bad or repeated field `{f}` (keys: {', '.join(sorted(KEYS))})")
+        p[k] = v.split() if k == "bases" else v
+    if not p.get("bases"):
+        sys.exit(f"routine-policy: {where}: {repo} needs bases=")
+    for v in p["bases"] + [p.get(k) or "x" for k in ("status", "from", "runner")]:
+        if not re.fullmatch(r"[\w./-]+", v):
+            sys.exit(f"routine-policy: {where}: `{v}` is not a branch or status name (letters, digits, . / _ -)")
+    if p.get("task", "T-NNN") != "T-NNN":
+        sys.exit(f"routine-policy: {where}: task= takes only T-NNN")
+    for k in ("branch", "builder"):
+        if k in p:
+            try:
+                rx = re.compile(p[k])
+            except re.error as e:
+                sys.exit(f"routine-policy: {where}: {k}= does not compile: {e}")
+            if rx.groups < 1:
+                sys.exit(f"routine-policy: {where}: {k}= needs a group for the task id")
+    if "runner" in p and "status" not in p:
+        sys.exit(f"routine-policy: {where}: runner= only means something with status=")
+    if "from" in p and "branch" not in p:
+        sys.exit(f"routine-policy: {where}: from= only means something with branch=")
+    return repo, p
+
+
+def build():
+    if not CONFS or not os.path.isdir(CONFS):
+        sys.exit("routine-policy: no conf folder: set ROUTINE_CONF_DIR or AGENT_OVERLAY_DIR")
+    repos, seen = {}, {}
+    for conf in sorted(glob.glob(os.path.join(CONFS, "*.conf"))):
+        for line in conf_lines(conf):
+            repo, p = parse(line, os.path.basename(conf))
+            if repo in repos:
+                sys.exit(f"routine-policy: {repo} is in both {seen[repo]} and {os.path.basename(conf)}")
+            repos[repo], seen[repo] = p, os.path.basename(conf)
+    return {"repos": repos}
+
+
+def main():
+    text = json.dumps(build(), indent=2, sort_keys=True) + "\n"
+    if sys.argv[1:] != ["--install"]:
+        sys.stdout.write(text)
+        return
+    host = ENV.get("AGENT_RULES_HOST")
+    if not host:
+        sys.exit("routine-policy: set AGENT_RULES_HOST (ssh host) in ~/.config/claude-agent-setup/env")
+    os.makedirs(os.path.dirname(LAPTOP), exist_ok=True)
+    for dest in (LAPTOP, LAPTOP.replace(".json", ".defaults.json")):
+        with tempfile.NamedTemporaryFile("w", dir=os.path.dirname(dest), delete=False) as fh:
+            fh.write(text)
+        os.chmod(fh.name, 0o644)
+        os.replace(fh.name, dest)
+    # write then rename, so the hook never reads half a file
+    dflt = REMOTE.replace(".json", ".defaults.json")
+    subprocess.run(["ssh", host, f"mkdir -p {os.path.dirname(REMOTE)} && cat > {REMOTE}.new && chmod 644 {REMOTE}.new "
+                    f"&& cp {REMOTE}.new {dflt}.new && mv {dflt}.new {dflt} && mv {REMOTE}.new {REMOTE}"],
+                   input=text, text=True, check=True, timeout=30)
+    print(f"routine-policy: wrote {LAPTOP} and {host}:{REMOTE} (+ .defaults.json; {len(json.loads(text)['repos'])} repos)")
+
+
+if __name__ == "__main__":
+    main()

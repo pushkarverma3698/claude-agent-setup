@@ -1,0 +1,7 @@
+#!/bin/bash
+# claude-bgd <main|alt|alt2>: the background-session daemon for one profile, in the foreground for systemd.
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+set -euo pipefail
+source /usr/local/bin/claude-profile-env "${1:-}"
+cd /home/claude-agent
+exec "$claude" daemon run

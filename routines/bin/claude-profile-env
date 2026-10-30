@@ -1,0 +1,14 @@
+# claude-profile-env <main|alt|alt2>: sourced by claude-bgd, claude-routine and claude-handover, so all
+# three pick the same CLAUDE_CONFIG_DIR (the daemon socket is keyed on it). Written by
+# setup-claude-routines on the founder's laptop; edit it there.
+case "${1:-}" in
+  main) unset CLAUDE_CONFIG_DIR ;;
+  alt|alt2) export CLAUDE_CONFIG_DIR=/home/claude-agent/.claude-$1 ;;
+  *)    echo "unknown profile '${1:-}' (main, alt or alt2)" >&2; exit 64 ;;
+esac
+claude=/home/claude-agent/.local/bin/claude
+bgd_ready() { # the profile's claude-bgd daemon is up (origin foreground, not a transient one)
+  local st; st=$("$claude" daemon status 2>/dev/null || true)   # no pipe: grep -q + pipefail = SIGPIPE
+  grep -q '^origin: *foreground' <<<"$st" || {
+    echo "claude-bgd@$1 is not running (sudo systemctl start claude-bgd@$1); refusing to start a transient daemon" >&2; exit 69; }
+}

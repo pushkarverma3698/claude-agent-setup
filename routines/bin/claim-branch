@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# claim-branch <owner/repo> <branch> <base>        claim a new task (base: the integration branch)
+# claim-branch --resume <owner/repo> <branch>       take over an existing leftover branch (or a PR's head)
+#
+# A claim is one empty "chore(claim): ..." commit, made through the GitHub API (instant, no pre-push suite, same on
+# the laptop and the VPS). Its time is the claim time: the ready script holds a branch whose tip is still a claim for
+# CLAIM_HOURS. 2026-10-29: claims on the bare base commit looked hours old and the queue handed T-205/T-214/T-247
+# to a second session; feat/t247-disputes and feat/t247-ownership-disputes were both built.
+# --resume also refuses while another local worktree of the repo on <branch> has uncommitted files or unpushed commits
+# (worktree-holds, the same check the ready scripts use): a session stopped on the usage limit with its work unpushed.
+# claim-branch --release <owner/repo> <branch>      give a claim back: delete the branch, only while its tip is still a claim
+#   commit and no PR (any state) has it as head. 2026-10-30: the T-138 and T-144 builders found their work depends on unbuilt
+#   tasks, pushed nothing, and their claim-only branches kept the ready script SKIPping both for 12 h instead of listing them BLOCKED.
+# Exit 0 = claimed (prints the claim sha), then `git fetch` and work on origin/<branch>; or released (prints "released").
+# Exit 3 = someone holds the task: pick other work; with --release: not released, the branch carries work or a PR.
+set -euo pipefail
+CLAIM_HOURS=${CLAIM_HOURS:-12}   # keep equal to the ready scripts
+LIVE_HOURS=${LIVE_HOURS:-2}
+held() { echo "claim-branch: $*, someone holds the task: pick other work" >&2; exit 3; }
+
+resume=0 release=0
+[ "${1:-}" = --resume ] && { resume=1; shift; }
+[ "${1:-}" = --release ] && { release=1; shift; }
+if [ $release = 1 ]; then [ $# -eq 2 ] || { echo "usage: claim-branch --release <owner/repo> <branch>" >&2; exit 2; }
+elif [ $resume = 1 ]; then [ $# -eq 2 ] || { echo "usage: claim-branch --resume <owner/repo> <branch>" >&2; exit 2; }
+else [ $# -eq 3 ] || { echo "usage: claim-branch <owner/repo> <branch> <base>" >&2; exit 2; }; fi
+repo=$1 branch=$2 base=${3:-}
+api() { gh api "repos/$repo/$1" "${@:2}"; }
+msg="chore(claim): reserve $branch for one session"
+# The local clone of $repo: the repo $PWD is in, else ~/work/<name> (VPS) or ~/Projects/<name> (laptop).
+repo_dir() {
+  local d
+  for d in "${CLAIM_REPO_DIR:-}" "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+           "$HOME/work/${repo#*/}" "$HOME/Projects/${repo#*/}"; do
+    [ -n "$d" ] && [ -d "$d" ] || continue
+    case "$(git -C "$d" config --get remote.origin.url 2>/dev/null)" in
+      *"$repo"|*"$repo.git") echo "$d"; return 0 ;;
+    esac
+  done
+}
+hours_since() { echo $(( ( $(date -u +%s) - $(date -u -d "$1" +%s 2>/dev/null || date -u -j -f %Y-%m-%dT%H:%M:%SZ "$1" +%s) ) / 3600 )); }
+
+if [ $release = 1 ]; then
+  tip=$(api "git/ref/heads/$branch" --jq .object.sha 2>/dev/null) || { echo "claim-branch: no branch $branch (nothing to release)"; exit 0; }
+  subj=$(api "git/commits/$tip" --jq '.message|split("\n")[0]')
+  [[ $subj == chore\(claim\):* ]] || { echo "claim-branch: $branch carries work beyond the claim, not released" >&2; exit 3; }
+  prs=$(gh pr list -R "$repo" --head "$branch" --state all --json number --jq length) || { echo "claim-branch: cannot list PRs" >&2; exit 2; }
+  [ "$prs" = 0 ] || { echo "claim-branch: $branch has a PR, not released" >&2; exit 3; }
+  api "git/refs/heads/$branch" -X DELETE >/dev/null 2>&1 || { echo "claim-branch: delete failed" >&2; exit 2; }
+  echo released; exit 0
+fi
+if [ $resume = 1 ]; then
+  tip=$(api "git/ref/heads/$branch" --jq .object.sha 2>/dev/null) || { echo "claim-branch: no branch $branch" >&2; exit 2; }
+  if dir=$(repo_dir) && [ -n "$dir" ]; then
+    wh=$(command -v worktree-holds || echo "$(dirname "$(readlink -f "$0")")/worktree-holds")
+    out=$("$wh" "$dir" "$branch" --exclude "$PWD" --pushed "$tip") || {
+      rc=$?; [ $rc = 3 ] && held "$(echo "$out" | paste -sd ';' -)"
+      echo "claim-branch: worktree-holds failed (exit $rc)" >&2; exit 2; }
+  fi
+  read -r subj when < <(api "git/commits/$tip" --jq '(.message|split("\n")[0]|gsub(" ";"_")) + " " + .committer.date')
+  age=$(hours_since "$when")
+  if [[ $subj == chore\(claim\):* ]]; then [ "$age" -lt "$CLAIM_HOURS" ] && held "$branch was claimed ${age}h ago"
+  else [ "$age" -lt "$LIVE_HOURS" ] && held "$branch was pushed ${age}h ago"; fi
+  tree=$(api "git/commits/$tip" --jq .tree.sha)
+  claim=$(api git/commits -f "message=$msg" -f "tree=$tree" -f "parents[]=$tip" --jq .sha)
+  # Not a force update: GitHub accepts it only while the tip is still $tip, so of two resumers exactly one wins.
+  api "git/refs/heads/$branch" -X PATCH -f "sha=$claim" -F force=false >/dev/null 2>&1 || held "$branch moved just now"
+  echo "$claim"; exit 0
+fi
+
+api "git/ref/heads/$branch" >/dev/null 2>&1 && held "$branch already exists"
+base_sha=$(api "git/ref/heads/$base" --jq .object.sha)
+# The task part of the name, up to the first number and its dash: feat/t247-x -> feat/t247-, task/issue-42-x -> task/issue-42-.
+[[ $branch =~ ^([^0-9]*[0-9]+-) ]] && prefix=${BASH_REMATCH[1]} || prefix=""
+# The integration branch is the repo's merge base in the guard's routine-policy.json (bases[0]); unlisted repos use <base>.
+policy=${ROUTINE_POLICY:-}
+for f in /opt/agent-rules/hooks/routine-policy.json "$HOME/.claude/hooks/routine-policy.json"; do
+  [ -n "$policy" ] || { [ -f "$f" ] && policy=$f; }
+done
+integ_name=${INTEGRATION:-$( [ -n "$policy" ] && jq -r --arg r "$repo" '.repos[$r].bases[0] // empty' "$policy" 2>/dev/null )}
+integ_name=${integ_name:-$base}
+# Branches of the same task under any slug. One already merged into the integration branch is history, not a holder
+# (the repo keeps merged branches).
+holders() {
+  [ -n "$prefix" ] || return 0
+  local integ ref sha
+  integ=$(api "git/ref/heads/$integ_name" --jq .object.sha 2>/dev/null || echo "$base_sha")
+  for ref in $(api "git/matching-refs/heads/$prefix" --jq '.[] | .ref + "=" + .object.sha'); do
+    sha=${ref#*=}; ref=${ref%%=*}; ref=${ref#refs/heads/}
+    [ "$(api "compare/$integ...$sha" --jq .ahead_by 2>/dev/null || echo 1)" = 0 ] && \
+      [[ $(api "git/commits/$sha" --jq '.message|split("\n")[0]') != chore\(claim\):* ]] && continue
+    echo "$ref"
+  done
+}
+others=$(holders)
+[ -n "$others" ] && held "the task is held by $(echo $others)"
+tree=$(api "git/commits/$base_sha" --jq .tree.sha)
+claim=$(api git/commits -f "message=$msg" -f "tree=$tree" -f "parents[]=$base_sha" --jq .sha)
+api git/refs -f "ref=refs/heads/$branch" -f "sha=$claim" >/dev/null 2>&1 || held "$branch was created just now"
+# Two claims for one task in the same second under different slugs: the first name in sort order keeps it.
+winner=$(holders | sort | head -1)
+if [ -n "$winner" ] && [ "$winner" != "$branch" ]; then
+  api "git/refs/heads/$branch" -X DELETE >/dev/null 2>&1 || true
+  held "the task was claimed as $winner at the same time"
+fi
+echo "$claim"

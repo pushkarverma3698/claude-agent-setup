@@ -1,0 +1,12 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+[Unit]
+Description=Claude routine %i (steer it from the Claude app)
+After=network-online.target claude-bgd@main.service claude-bgd@alt.service claude-bgd@alt2.service
+
+[Service]
+Type=oneshot
+Slice=claude.slice
+User=claude-agent
+Environment=HOME=/home/claude-agent
+ExecStart=/usr/local/bin/claude-routine %i
+TimeoutStartSec=10min

@@ -1,0 +1,13 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# Manual run, every repo: sudo systemctl start routine-verdict.service
+[Unit]
+Description=Routine PR verdict (all repos)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=claude-agent
+Environment=HOME=/home/claude-agent
+ExecStart=/usr/local/bin/routine-verdict all
+TimeoutStartSec=5min

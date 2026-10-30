@@ -1,0 +1,13 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# Instance = group (a GROUP name from the confs, or all). Journal shows `sent` per repo when Telegram took the verdict.
+[Unit]
+Description=Routine PR verdict (%i): PROD-READY or why not, from the GitHub API only
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=claude-agent
+Environment=HOME=/home/claude-agent
+ExecStart=/usr/local/bin/routine-verdict %i
+TimeoutStartSec=5min

@@ -1,0 +1,28 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# Instance = profile (main|alt|alt2). Stopping it ends that profile's background sessions.
+[Unit]
+Description=Claude background-session daemon, %i profile (routines and handovers)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Slice=claude.slice
+User=claude-agent
+Environment=HOME=/home/claude-agent
+# 2026-10-27: let sessions retry a rate-limit or overload wait themselves. Not proven to cover --bg sessions, so the resume timer stays.
+Environment=CLAUDE_CODE_RETRY_WATCHDOG=1
+# 2026-10-29: Bash calls stopped at the 2-min default, so builders' pushes (pre-push hook: typecheck + full suite)
+# and installs went to the background and agents sleep-polled them. 20 min default, 30 min cap.
+Environment=BASH_DEFAULT_TIMEOUT_MS=1200000 BASH_MAX_TIMEOUT_MS=1800000
+ExecStart=/usr/local/bin/claude-bgd %i
+Restart=always
+RestartSec=15
+RestartSteps=8
+RestartMaxDelaySec=10min
+RestartPreventExitStatus=64
+OOMPolicy=continue
+OOMScoreAdjust=500
+
+[Install]
+WantedBy=multi-user.target

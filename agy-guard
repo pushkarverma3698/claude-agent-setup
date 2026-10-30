@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#
+# agy-guard — answer one question: is it safe to review Antigravity's work yet?
+# =============================================================================
+# Antigravity keeps one SQLite ledger per conversation in
+# ~/.gemini/antigravity/conversations/. Every agent turn writes to it, so the
+# newest ledger mtime is a reliable "an agent is still working" signal.
+#
+# Why this exists (2026-08-06):
+#   20:19  three conversations dispatched in parallel
+#   20:24  Antigravity reports done; the founder relays "it's done"
+#   20:27  Claude reviews the diff — 16 failing tests, no implementation
+#   20:36  the STILL-LIVE conversation reverts its own work byte-exact to HEAD
+#          and runs a full tsc rebuild to confirm a clean tree
+#   20:39  a ledger is still being written, 15 minutes after "done"
+#
+# The review at 20:27 described a state that stopped existing at 20:36, and
+# Claude's own edits at 20:38 were one write away from the same clobbering.
+# "Done" was a human relaying an agent's self-report while the agent still had
+# write access to the tree.
+#
+# Usage:
+#   agy-guard              # default 3-minute quiet window
+#   agy-guard 10           # require 10 minutes of silence
+#
+# Exit 0 = idle, safe to review.  Exit 1 = still writing, do not review.
+# Designed to gate: `agy-guard && git add -A && git commit -m wip`
+
+set -euo pipefail
+
+readonly LEDGER_DIR="${HOME}/.gemini/antigravity/conversations"
+readonly QUIET_MINUTES="${1:-3}"
+
+if [[ ! -d "${LEDGER_DIR}" ]]; then
+  echo "agy-guard: no ledger directory at ${LEDGER_DIR}"
+  echo "           Antigravity has never run on this machine — nothing to wait for."
+  exit 0
+fi
+
+# -newermt is the whole check: any ledger touched inside the quiet window means
+# some conversation is mid-turn, whichever one it is.
+# Newline-delimited string rather than an array: macOS ships bash 3.2, which has
+# no `mapfile` and errors on empty-array expansion under `set -u`.
+recent="$(find "${LEDGER_DIR}" -name '*.db' -newermt "-${QUIET_MINUTES} minutes" 2>/dev/null || true)"
+
+if [[ -z "${recent}" ]]; then
+  echo "agy-guard: IDLE — no conversation ledger written in ${QUIET_MINUTES}m."
+  echo "           Safe to review. Commit the tree BEFORE you start reading."
+  exit 0
+fi
+
+count="$(printf '%s\n' "${recent}" | wc -l | tr -d ' ')"
+echo "agy-guard: BUSY — ${count} conversation(s) written in the last ${QUIET_MINUTES}m."
+echo
+while IFS= read -r ledger; do
+  # stat -f is BSD/macOS; this script is laptop-only by design (so is Antigravity).
+  printf '  %s  %s\n' "$(stat -f '%Sm' -t '%H:%M:%S' "${ledger}")" "$(basename "${ledger}")"
+done <<< "${recent}"
+echo
+echo "  DO NOT review or edit the working tree yet. A live conversation can still"
+echo "  revert its own work — that is exactly how AG-004 erased 140 reviewed lines"
+echo "  nine minutes after reporting done."
+echo
+echo "  Wait for silence, or close the conversation in the Antigravity GUI."
+exit 1

@@ -1,0 +1,136 @@
+#!/bin/bash
+# claude-notify [--html] [--buttons <file>] "<text>"   (or the text on stdin)
+# Sends a Telegram message to the founder from the VPS. Used by claude-routine (started /
+# not-started) and by routine sessions (what they picked, final report).
+#   (default)         plain text, exactly as before.
+#   --html            parse_mode HTML: <b> <i> <u> <s> <code> <pre> <a href> <blockquote>. Escape dynamic text
+#                     with `claude-notify --escape "<text>"` (& < > only) or notify_escape when sourced.
+#   --buttons <file>  inline URL buttons: one `Label|https://url` per line, a blank line starts a new row.
+#                     Lines without a pipe or without an http(s) URL are skipped. Buttons ride on the last part.
+#   --escape <text>   print <text> HTML-escaped and exit (no network).
+# Over 4096 characters the message is split at line breaks only, never inside a tag or entity; in --html
+# mode tags still open at a split are closed and reopened in the next part.
+# Installed to /usr/local/bin by setup-claude-routines; keys come from /etc/claude-notify.env
+# (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; mode 0640 root:claude-agent). Never fails the caller: exit 0
+# always, "sent" on stdout when Telegram answered ok, the reason on stderr otherwise.
+
+# & first so the entities it adds are not re-escaped.
+notify_escape() { local s=$1; s=${s//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; printf '%s' "$s"; }
+
+# notify_split <dir> <limit>: text on stdin -> <dir>/part.001, part.002 ...
+notify_split() {
+  mkdir -p "$1" && python3 -c '
+import sys, re
+d, limit = sys.argv[1], int(sys.argv[2])
+text = sys.stdin.buffer.read().decode("utf-8", "replace")
+RESERVE = 200  # room for closing tags added at a split
+TAG = re.compile(r"<(/?)([a-zA-Z-]+)([^>]*)>")
+def open_tags(s, stack):
+    for m in TAG.finditer(s):
+        if m.group(1): 
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i][0] == m.group(2): del stack[i:]; break
+        else: stack.append((m.group(2), m.group(0)))
+def safe_cut(s, n):
+    """cut index <= n at a space, not inside a tag or an entity"""
+    c = s.rfind(" ", 0, n)
+    c = c if c > 0 else n
+    lt, gt = s.rfind("<", 0, c), s.rfind(">", 0, c)
+    if lt > gt: c = lt
+    amp = s.rfind("&", 0, c)
+    if amp != -1 and ";" not in s[amp:c] and c - amp < 10: c = amp
+    return c if c > 0 else n
+lines = []
+for ln in text.split("\n"):
+    while len(ln) > limit - RESERVE:
+        c = safe_cut(ln, limit - RESERVE); lines.append(ln[:c]); ln = ln[c:].lstrip(" ") if ln[c:c+1] == " " else ln[c:]
+    lines.append(ln)
+parts, cur, stack, fresh = [], "", [], True
+def closers(): return "".join("</%s>" % t for t, _ in reversed(stack))
+for ln in lines:
+    if not fresh and len(cur) + 1 + len(ln) > limit - RESERVE:
+        parts.append(cur + closers())
+        cur, fresh = "".join(o for _, o in stack), True
+    cur = cur + ln if fresh else cur + "\n" + ln
+    fresh = False
+    open_tags(ln, stack)
+if cur.strip(): parts.append(cur + closers())
+for i, p in enumerate(parts, 1):
+    open("%s/part.%03d" % (d, i), "w", encoding="utf-8").write(p)
+' "$1" "$2"
+}
+
+# notify_buttons_json <file>: inline_keyboard JSON, or nothing when no valid line.
+notify_buttons_json() {
+  python3 -c '
+import sys, json
+rows, row = [], []
+for ln in open(sys.argv[1], encoding="utf-8").read().split("\n"):
+    ln = ln.strip()
+    if not ln:
+        if row: rows.append(row); row = []
+        continue
+    if "|" not in ln: continue
+    label, url = ln.rsplit("|", 1); label, url = label.strip(), url.strip()
+    if label and url.startswith(("https://", "http://")): row.append({"text": label, "url": url})
+if row: rows.append(row)
+if rows: print(json.dumps({"inline_keyboard": rows}, separators=(",", ":"), ensure_ascii=False), end="")
+' "$1"
+}
+[ -n "${CLAUDE_NOTIFY_LIB:-}" ] && return 0 2>/dev/null
+
+html=0; buttons_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --html) html=1; shift ;;
+    --buttons) buttons_file=${2:-}; shift 2 2>/dev/null || shift ;;
+    --escape) shift; notify_escape "${*:-$(cat)}"; exit 0 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+ENV_FILE="${CLAUDE_NOTIFY_ENV:-/etc/claude-notify.env}"
+export LC_ALL=C.UTF-8 2>/dev/null || true
+
+if [ $# -gt 0 ]; then text="$*"; else text=$(cat); fi
+# A literal \n is a line break: dontAsk sessions are refused multi-line commands, so they send one line.
+text=${text//\\n/$'\n'}
+[ -n "$text" ] || { echo "claude-notify: empty message" >&2; exit 0; }
+[ -r "$ENV_FILE" ] || { echo "claude-notify: cannot read $ENV_FILE" >&2; exit 0; }
+
+key() { grep -m1 "^$1=" "$ENV_FILE" | cut -d= -f2- | tr -d "\"'\r"; }
+token=$(key TELEGRAM_BOT_TOKEN); chat=$(key TELEGRAM_CHAT_ID)
+[ -n "$token" ] && [ -n "$chat" ] || { echo "claude-notify: token or chat id missing in $ENV_FILE" >&2; exit 0; }
+
+# Telegram caps a message at 4096 characters. Plain mode keeps the old behaviour (3900-character parts);
+# HTML mode splits at line breaks, never inside a tag, and puts the buttons on the last part.
+markup=""
+[ -n "$buttons_file" ] && { [ -r "$buttons_file" ] && markup=$(notify_buttons_json "$buttons_file") || echo "claude-notify: cannot read buttons file $buttons_file" >&2; }
+send() { # send <text> [reply_markup]
+  local out; local -a args=(--data-urlencode "chat_id=$chat" --data-urlencode "text=$1" --data "disable_web_page_preview=true")
+  [ "$html" = 1 ] && args+=(--data "parse_mode=HTML")
+  [ -n "$2" ] && args+=(--data-urlencode "reply_markup=$2")
+  # The token goes to curl through a config on stdin, so it never shows in a process list.
+  out=$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" | curl -sS --max-time 20 -K - "${args[@]}" 2>&1) || true
+  # Bad HTML from a caller must not lose the message: resend it once as plain text.
+  if [ "$html" = 1 ] && [[ "$out" == *"can't parse entities"* ]]; then
+    echo "claude-notify: HTML refused, sent as plain text" >&2
+    args=("${args[@]/parse_mode=HTML/parse_mode=}")
+    out=$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" | curl -sS --max-time 20 -K - "${args[@]}" 2>&1) || true
+  fi
+  if [[ "$out" == *'"ok":true'* ]]; then echo sent; [ -n "${CLAUDE_NOTIFY_VERBOSE:-}" ] && echo "$out"
+  else echo "claude-notify: Telegram refused or unreachable: ${out//$token/***}" | cut -c1-300 >&2; fi
+}
+if [ "$html" = 1 ]; then
+  dir=$(mktemp -d); trap 'rm -rf "$dir"' EXIT
+  printf '%s' "$text" | notify_split "$dir" 4000
+  last=$(ls "$dir" | tail -1)
+  for f in "$dir"/part.*; do
+    if [ "$(basename "$f")" = "$last" ]; then send "$(cat "$f")" "$markup"; else send "$(cat "$f")" ""; fi
+  done
+else
+  while [ ${#text} -gt 3900 ]; do send "${text:0:3900}" ""; text=${text:3900}; done
+  send "$text" "$markup"
+fi
+exit 0

@@ -1,0 +1,156 @@
+#!/bin/sh
+# agy — dispatch/track wrapper around Google Antigravity's agentapi.
+#
+# Local dev tool only. Antigravity's language_server binds its gRPC address
+# to an ephemeral port and mints a fresh CSRF token on every restart, so both
+# are rediscovered on every call rather than cached. Requires Antigravity.app
+# to be running (agentapi is a thin client to its language_server process).
+
+set -eu
+
+AGENTAPI="$HOME/.gemini/antigravity/bin/agentapi"
+LS_MATCH="Antigravity.app/Contents/Resources/bin/language_server"
+
+die() {
+  echo "agy: $*" >&2
+  exit 1
+}
+
+find_pid() {
+  p=$(pgrep -f "$LS_MATCH" 2>/dev/null | head -1 || true)
+  if [ -z "$p" ]; then
+    p=$(ps aux | grep -i "$LS_MATCH" | grep -v grep | awk '{print $2}' | head -1 || true)
+  fi
+  echo "$p"
+}
+
+find_csrf() {
+  ps -o command= -p "$1" | sed -n 's/.*--csrf_token \([^ ]*\).*/\1/p'
+}
+
+# Probe every LISTEN port on the language_server PID in parallel and return
+# the first that answers the Antigravity RPC protocol. Wrong ports fail fast
+# with a transport-level "connection error" (frame-too-large / EOF); the
+# right one returns a normal RPC-level error ("trajectory not found") because
+# the probe conversation id doesn't exist. That distinction is the signal.
+find_port() {
+  pid="$1"
+  csrf="$2"
+  ports=$(lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | tail -n +2 | awk '{print $9}' | sed 's/.*://' | sort -un)
+  [ -n "$ports" ] || die "no listening ports found on language_server pid $pid"
+
+  tmp=$(mktemp -d)
+  for p in $ports; do
+    (ANTIGRAVITY_LS_ADDRESS="127.0.0.1:$p" ANTIGRAVITY_CSRF_TOKEN="$csrf" \
+      "$AGENTAPI" get-conversation-metadata agy-port-probe >"$tmp/$p.log" 2>&1) &
+  done
+  wait
+
+  found=""
+  for p in $ports; do
+    if [ -f "$tmp/$p.log" ] && ! grep -q "connection error" "$tmp/$p.log"; then
+      found="$p"
+      break
+    fi
+  done
+  rm -rf "$tmp"
+  [ -n "$found" ] || die "no port on pid $pid answered the Antigravity RPC protocol (is Antigravity still starting up?)"
+  echo "$found"
+}
+
+resolve() {
+  pid=$(find_pid || true)
+  [ -n "$pid" ] || die "Antigravity is not running (no language_server process found). Launch Antigravity.app first."
+  csrf=$(find_csrf "$pid")
+  [ -n "$csrf" ] || die "could not read --csrf_token from language_server process args (pid $pid)"
+  port=$(find_port "$pid" "$csrf")
+  export ANTIGRAVITY_LS_ADDRESS="127.0.0.1:$port"
+  export ANTIGRAVITY_CSRF_TOKEN="$csrf"
+}
+
+usage() {
+  cat <<'EOF'
+agy — dispatch tasks to Google Antigravity from the terminal
+
+Usage:
+  agy new [--model=pro|flash|flash_lite] [--title=<title>] "<brief>"
+  agy send <conversation_id> "<message>"
+  agy status <conversation_id>              # conversation metadata (state, timestamps)
+  agy steps <conversation_id>                # step index/type/status from the local ledger
+  agy raw <agentapi-subcommand> [args...]   # escape hatch — any agentapi call, address+token pre-resolved
+
+Address and CSRF token are rediscovered on every call — Antigravity assigns
+both fresh on each restart, so nothing here is cached.
+
+One agent per issue: `agy new` is refused while agy-guard reports another conversation writing, or when the brief
+names #N and origin already has task/issue-N. AGY_ALLOW_PARALLEL=1 overrides. PRs go to beta, never production;
+nothing merges or approves — the brief must say so (the delegated-task skill does).
+
+Review discipline: agy has no way to grade Antigravity's own output. Close
+every delegated task by reading `git diff` and running the brief's stated
+verify command yourself — never take Antigravity's summary as done.
+EOF
+}
+
+cmd_steps() {
+  conv_id="${1:-}"
+  [ -n "$conv_id" ] || die "usage: agy steps <conversation_id>"
+  db="$HOME/.gemini/antigravity/conversations/$conv_id.db"
+  [ -f "$db" ] || die "no local ledger for conversation $conv_id at $db"
+  command -v sqlite3 >/dev/null 2>&1 || die "sqlite3 not found on PATH"
+  # step_type/status are raw protobuf enum ints (undecoded — the payload
+  # blobs are protobuf, not text, so this is index/type/status only).
+  sqlite3 -header -column "$db" "select idx, step_type, status from steps order by idx;"
+}
+
+[ $# -ge 1 ] || {
+  usage
+  exit 1
+}
+sub="$1"
+shift
+
+case "$sub" in
+  new)
+    # One agent per issue, in code (2026-10-11: issues #115/#117/#119 were one bug worked three times). Refused while another
+    # Antigravity conversation is writing (agy-guard), or when the brief names an issue that already has a task/issue-N
+    # branch on origin. AGY_ALLOW_PARALLEL=1 overrides both, on purpose.
+    if [ "${AGY_ALLOW_PARALLEL:-0}" != 1 ]; then
+      guard="$(dirname "$0")/agy-guard"
+      if [ -x "$guard" ] && ! "$guard" >/dev/null 2>&1; then
+        die "another Antigravity conversation is still writing (agy-guard says not idle). Wait, or AGY_ALLOW_PARALLEL=1 if that is intended."
+      fi
+      for arg in "$@"; do
+        for n in $(printf '%s' "$arg" | grep -o '#[0-9][0-9]*' | tr -d '#' | sort -un); do
+          if git ls-remote --heads origin "task/issue-$n" "task/issue-$n-*" 2>/dev/null | grep -q .; then
+            die "issue #$n already has a task/issue-$n branch on origin: one agent per issue. AGY_ALLOW_PARALLEL=1 overrides."
+          fi
+        done
+      done
+    fi
+    resolve
+    "$AGENTAPI" new-conversation "$@"
+    ;;
+  send)
+    resolve
+    "$AGENTAPI" send-message "$@"
+    ;;
+  status)
+    resolve
+    "$AGENTAPI" get-conversation-metadata "$@"
+    ;;
+  steps)
+    cmd_steps "$@"
+    ;;
+  raw)
+    resolve
+    "$AGENTAPI" "$@"
+    ;;
+  -h | --help | help)
+    usage
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

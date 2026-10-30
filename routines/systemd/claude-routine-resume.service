@@ -1,0 +1,13 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# Wakes routine runs that stopped on "You've hit your … limit" once their account has usage again.
+[Unit]
+Description=Resume Claude routine runs stopped on the usage limit
+After=network-online.target claude-bgd@main.service claude-bgd@alt.service claude-bgd@alt2.service
+
+[Service]
+Type=oneshot
+Slice=claude.slice
+User=claude-agent
+Environment=HOME=/home/claude-agent
+ExecStart=/usr/local/bin/claude-routine --resume-stopped
+TimeoutStartSec=20min

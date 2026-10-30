@@ -1,0 +1,10 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# The schedule comes from a drop-in per routine (claude-routine@<name>.timer.d/schedule.conf).
+[Unit]
+Description=Schedule for Claude routine %i
+
+[Timer]
+Persistent=true
+
+[Install]
+WantedBy=timers.target

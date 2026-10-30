@@ -1,0 +1,290 @@
+#!/bin/bash
+# claude-routine <profile[,profile…]> <repo> <name> <prompt-file> [-- claude flags]
+# claude-routine <name>          (definition in /etc/claude-routines/<name>.{conf,md})
+# A comma list of profiles: the run goes to the first account that answers a one-word haiku call
+# (2026-10-25: a nightly run died at once with "You've hit your session limit" because the one
+# account it ran on had spent its 5-hour window during the day).
+# claude-routine                 (list the routines)
+# claude-routine --resume-stopped  (hourly, claude-routine-resume.timer: see resume_one)
+# Starts one routine run as a background Claude session with Remote Control, in its own git worktree at a fixed
+# path (~/work/wt/<name>, optional BASE=<branch> in the conf; default origin/HEAD). No `-w`: that flag put the
+# session behind the platform's worktree fence (2026-10-26: 27-39% of builder commands refused).
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+set -euo pipefail
+# A routine ends when it sends its report. Self-scheduled wake-ups outlive that and re-prompt a finished run
+# (10-28: a run got two "Fallback check" prompts after its report). Task notifications already wake the lead.
+no_self_wakeups="ScheduleWakeup,CronCreate"
+[ "$(id -un)" = claude-agent ] || exec sudo -n -u claude-agent -H "$0" "$@"
+D=/etc/claude-routines
+# Plain names come from $D/routines.env (optional): LABEL_<profile>=…, TITLE_<routine>=… (`-` written as `_`).
+[ -r "$D/routines.env" ] && . "$D/routines.env"
+label_of() { local v="LABEL_${1//-/_}"; echo "${!v:-$1}"; }
+# Telegram wording (2026-10-27): the founder reads these without any code context, so line 1 is the result with a
+# marker, and the last line is "You need to: …" or "Nothing needed from you". title_of gives the routine a plain name.
+title_of() { local v="TITLE_${1//-/_}"; echo "${!v:-$1}"; }
+# 2026-10-27u format: line 1 marker (✅ ⏳ ⚠️ ❌) + plain result, line 2 "You need to: …" or "Nothing needed from you.", then ≤3 "• " bullets.
+notify() { local r; r=$(/usr/local/bin/claude-notify "$1" 2>&1) || true; logger -t claude-routine "notify ${name:-?}: ${r:-no answer from claude-notify}" 2>/dev/null || true; } # journal gets "sent" or the Bot API error (2026-10-27)
+now_ist() { TZ=${NOTIFY_TZ:-UTC} date '+%H:%M'; }
+# One lock per routine, shared by the scheduled start and the resume pass, so neither acts on a run
+# the other is replacing or waking.
+L=/home/claude-agent/.cache/claude-routine; mkdir -p "$L"
+# 2026-10-29: probe_ok took any answer containing "ok" as usable ("OAuth token has expired" has "token") and an empty
+# one (120 s timeout, "529 overloaded") as out of usage: at 10:51 UTC alt2 and alt answered empty after a global OOM
+# and the run went to main on Opus. probe_verdict <answer> prints ok | auth | limit | retry.
+probe_verdict() {
+  local a=${1,,}
+  a=$(printf '%s' "$a" | tr -d '[:space:]'); a=${a%.}
+  if [ "$a" = ok ]; then echo ok
+  elif [[ "${1,,}" == *"/login"* || "${1,,}" == *"oauth token"* || "${1,,}" == *authentication* || "${1,,}" == *"invalid api key"* ]]; then echo auth
+  elif [[ "${1,,}" == *limit* ]]; then echo limit
+  else echo retry; fi
+}
+# probe_ok: the sourced profile answers "ok" to a one-word haiku call. Sets $ans (last answer) and $probe_why:
+# limit (out of usage), auth (login expired), unknown (empty / overloaded / timeout twice, 30 s apart).
+probe_ok() {
+  local try v; probe_why=
+  for try in 1 2; do
+    ans=$(cd /tmp && timeout 120 "$claude" -p --model haiku "Reply with the single word ok" </dev/null 2>&1 || true)
+    v=$(probe_verdict "$ans")
+    case $v in ok) return 0;; limit|auth) probe_why=$v; return 1;; esac
+    [ $try = 2 ] || sleep "${PROBE_RETRY_SLEEP:-30}"
+  done
+  probe_why=unknown; return 1
+}
+probe_msg() { # probe_msg <profile>: one plain line for the log
+  case $probe_why in
+    limit) echo "$1: out of usage" ;;
+    auth) echo "$1: login expired or invalid, run /login for this account ($(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100))" ;;
+    *) echo "$1: no usable answer twice (empty, overloaded or timed out; not treated as out of usage): $(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100)" ;;
+  esac
+}
+
+# 2026-10-27: a routine run that stopped on an error (usually "You've hit your … limit") sat stopped until the
+# next day's run removed it. resume_one <profile> <job id> wakes such a run in the same session (worktree,
+# context, name, Remote Control) once its account answers again, at most $max times per run. Any error counts,
+# not only the usage limit (a crash waited a day too). ROUTINE_RESUME_DRY=1 prints the decision and wakes nothing.
+max=3
+last_error() { # last_error <transcript>: the error of the run's last main-chain turn ("" = none), when it is from the last 20 h
+  local last; last=$(jq -c 'select(.type == "assistant" and (.isSidechain | not)) | [.error // "", .timestamp // ""]' "$1" 2>/dev/null | tail -1 || true)
+  [ -n "$last" ] && [ -n "$(jq -r '.[0]' <<<"$last")" ] || return 0
+  [ $(( $(date +%s) - $(date -d "$(jq -r '.[1]' <<<"$last")" +%s) )) -lt 72000 ] && jq -r '.[0]' <<<"$last"
+  return 0
+}
+# 2026-10-29: one routine run hit alt2's session limit at 06:05 with 5 builders mid-request. No turn recorded an
+# error, the job stayed "working", and last_error found nothing to wake. stalled <state.json> <transcript>: the
+# job says working but no record of the session (lead or subagent) is newer than 45 min, within the last 20 h.
+# Record timestamps, not mtimes: the lead file's mtime moved at 07:04 with its last record at 06:25.
+newest_record() { # newest_record <transcript>: epoch of the newest record of the session or any subagent ("" = none)
+  local p t s newest=0
+  for p in "$1" "${1%.jsonl}"/subagents/*.jsonl; do
+    [ -f "$p" ] || continue
+    t=$(tail -n 50 "$p" | jq -r '.timestamp // empty' 2>/dev/null | tail -1 || true)
+    [ -n "$t" ] && s=$(date -d "$t" +%s 2>/dev/null) && [ "$s" -gt "$newest" ] && newest=$s || true
+  done
+  [ "$newest" -gt 0 ] && echo "$newest" || true
+}
+stalled() {
+  [ "$(jq -r '.state // ""' "$1")" = working ] || return 1
+  local newest age; newest=$(newest_record "$2")
+  [ -n "$newest" ] || return 1
+  age=$(( $(date +%s) - newest ))
+  [ "$age" -ge 2700 ] && [ "$age" -lt 72000 ]
+}
+# live_run <state.json> <transcript>: working with a record under 45 min old. A manual start must not kill it
+# (10-29 10:49: `systemctl start claude-routine@<name>` removed live run 72c597ce).
+live_run() {
+  [ "$(jq -r '.state // ""' "$1")" = working ] || return 1
+  local newest; newest=$(newest_record "$2")
+  [ -n "$newest" ] && [ $(( $(date +%s) - newest )) -lt 2700 ]
+}
+resume_one() (
+  st="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$2/state.json"
+  [ -f "$st" ] || exit 0
+  f=$(jq -r '.linkScanPath // empty' "$st"); sid=$(jq -r '.sessionId // empty' "$st")
+  name=$(jq -r '.name // ""' "$st" | awk '{print $2}')
+  [ -f "$f" ] && [ -n "$sid" ] && [ -n "$name" ] && [ ! -e "$L/given-up-$2" ] || exit 0
+  err=$(last_error "$f"); [ -n "$err" ] || { stalled "$st" "$f" && err=stalled; } || exit 0
+  k=$(jq -r 'select(.type == "user" and (.message.content | type) == "string") | .message.content' "$f" | grep -c '\[routine-resume [0-9]' || true)
+  if [ "$k" -ge $max ]; then
+    : >"$L/given-up-$2"
+    notify "$(title_of "$name") — you need to: open it in the Claude app and type continue."$'\n'"It stopped $max times and will not restart by itself (last error: $err)."; exit 0
+  fi
+  if [ "${ROUTINE_RESUME_DRY:-0}" = 1 ]; then echo "would resume $name ($2, $1): last turn is error '$err', resume $((k+1))/$max"; exit 0; fi
+  exec 9>"$L/$name.lock"; flock -n 9 || { echo "$name: its scheduled start is running; next hour"; exit 0; }
+  [ -f "$st" ] || exit 0
+  probe_ok || { echo "$name ($2, $1): $(probe_msg "$1"); next hour"; exit 0; }
+  ( bgd_ready "$1" ) || exit 0
+  # --resume on a session the daemon still holds starts a copy, so stop it and wait for the daemon's
+  # "bg settled <id>" line; without flags it then wakes the same job. 2026-10-27: a busy run left
+  # `claude agents` (pid gone, state stopped) before the daemon settled it, and the wake made a copy.
+  dlog="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/daemon.log"
+  settled() { # the daemon's last claim/settle line for job $1 is a settle (or the log no longer names it)
+    local l; l=$(grep -E "bg (claimed-spare|settled) $1 " "$dlog" 2>/dev/null | tail -1 || true)
+    [ -z "$l" ] || [[ "$l" == *" settled "* ]]
+  }
+  wd=$(jq -r '.worktreePath // empty' "$st"); [ -n "$wd" ] || wd=$(jq -r '.cwd // empty' "$f" | head -1)
+  [ -d "$wd" ] || { echo "$name ($2): $wd is gone; cannot resume" >&2; exit 0; }
+  why_stopped="this account hit its usage limit; it has reset now"
+  [ "$err" = rate_limit ] || [ "$err" = stalled ] || why_stopped="of an error ($err)"
+  msg="You stopped because $why_stopped. Continue the job file from where you stopped: check what your agents already finished (git, PRs), restart any that died, and carry on with the remaining steps. [routine-resume $((k+1))/$max]"
+  for try in 1 2; do
+    "$claude" stop "$2" >/dev/null 2>&1 || true
+    for _ in $(seq 120); do settled "$2" && break; sleep 1; done
+    settled "$2" || { echo "$name ($2): the daemon has not settled it 120 s after stop; next hour"; exit 0; }
+    out=$(cd "$wd" && timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" --resume "$sid" -- "$msg" </dev/null 2>&1 | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' || true)
+    grep -q "woke session $2" <<<"$out" && break
+    copy=$(grep -oE 'started a copy as [0-9a-f]+' <<<"$out" | awk '{print $NF}' || true)
+    if [ -n "$copy" ]; then
+      "$claude" stop "$copy" >/dev/null 2>&1 || true
+      for _ in $(seq 60); do settled "$copy" && break; sleep 1; done
+      "$claude" rm "$copy" >/dev/null 2>&1 || true
+    fi
+    echo "$name ($2): wake attempt $try failed: $(tr '\n' ' ' <<<"$out" | cut -c1-200)" >&2
+  done
+  if grep -q "woke session $2" <<<"$out"; then
+    echo "resumed $name ($2, $1) $((k+1))/$max"
+    notify "$(title_of "$name") — nothing needed from you."$'\n'"It paused and is running again ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
+  elif grep -q "Couldn't reach the background service" <<<"$out"; then
+    # 2026-10-27: at load 31 the daemon did not answer the CLI within 45 s; that passes, so try next hour.
+    echo "$name ($2, $1): the background service did not answer (VPS load?); next hour"
+  else
+    : >"$L/given-up-$2"
+    notify "$(title_of "$name") — you need to: open it in the Claude app and type continue."$'\n'"It stopped and could not restart itself. Error: $(tr '\n' ' ' <<<"$out" | cut -c1-100)"
+  fi
+)
+if [ "${1:-}" = --resume-stopped ]; then
+  for p in main alt alt2; do (
+    source /usr/local/bin/claude-profile-env "$p"; cd /home/claude-agent
+    for id in $("$claude" agents --json --all 2>/dev/null | jq -r '.[] | select(.kind == "background" and ((.name // "") | startswith("routine: "))) | .id'); do
+      resume_one "$p" "$id" || echo "resume check of $id ($p) failed" >&2
+    done ) || echo "resume pass for $p failed" >&2
+  done
+  exit 0
+fi
+if [ $# -eq 0 ]; then
+  for c in "$D"/*.conf; do [ -e "$c" ] || continue; n=$(basename "$c" .conf)
+    ( source "$c"; printf '%-28s %-14s %-24s %s\n' "$n" "$PROFILE" "$REPO" "$SCHEDULE" ); done
+  exit 0
+fi
+MODE= BASE=
+if [ $# -eq 1 ]; then
+  [ -f "$D/$1.conf" ] || { echo "claude-routine: no routine $1 in $D" >&2; exit 64; }
+  ARGS=(); source "$D/$1.conf"
+  set -- "$PROFILE" "$REPO" "$1" "$D/$1.md" -- "${ARGS[@]}"
+fi
+[ $# -ge 4 ] || { echo "usage: claude-routine <main|alt|alt2>[,…] <repo> <name> <prompt-file> [-- claude flags]" >&2; exit 64; }
+profiles=$1 repo=$2 name=$3 prompt=$4; shift 4; [ "${1:-}" = -- ] && shift
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "claude-routine: bad name $name" >&2; exit 64; }
+dir=/home/claude-agent/work/$repo
+[ -d "$dir/.git" ] || { echo "claude-routine: no repo $dir" >&2; exit 64; }
+[ -s "$prompt" ] || { echo "claude-routine: empty or missing prompt $prompt" >&2; exit 64; }
+
+# Telegram status for the founder (claude-notify never fails). A run that dies before the session
+# starts says why; the started message goes out once `claude --bg` has taken the job.
+model=default; args=("$@")
+for i in "${!args[@]}"; do if [ "${args[$i]}" = --model ]; then model=${args[$((i+1))]:-default}; fi; done
+started=0 why="" need="" nl=$'\n'
+trap 'rc=$?; if [ $rc -ne 0 ] && [ "$started" = 0 ]; then
+  notify "$(title_of "$name") — ${need:+you need to: $need}${need:-nothing needed from you unless it fails again tomorrow.}${nl}It did not start today ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC}): ${why:-it failed before starting (exit $rc)}. Next try: its next scheduled run."; fi' EXIT
+
+exec 9>"$L/$name.lock"
+flock -w 200 9 || { why="the previous run was still being restarted and held it up for over 3 minutes"; need="start it again by hand from the Claude app if you want it today."; exit 75; }
+
+# Worktrees (2026-10-27): the lead runs in ~/work/wt/<name>, its builders in ~/work/wt/<name>-<task> (their own
+# `git worktree add`). Builders push after every commit, so a clean worktree with nothing unpushed holds nothing
+# that exists only here. wt_clean: true then. wt_remove takes a worktree out of its clone and frees its branch.
+W=/home/claude-agent/work/wt; mkdir -p "$W"
+# worktree-holds --clean also counts a commit in a PR head as on GitHub, so squash-merged builder worktrees are clean (10-29: 12 kept).
+wt_clean() { worktree-holds --clean "$1" >/dev/null 2>&1; }
+wt_remove() { local c; c=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || { rm -r -- "$1"; return; }
+  git -C "${c%/.git}" worktree remove -f -f "$1" 2>/dev/null || rm -r -- "$1"; git -C "${c%/.git}" worktree prune; }
+
+# One open run per routine: stop and remove the previous ones, under every listed account.
+IFS=, read -ra plist <<<"$profiles"
+# ... unless one is still working (a record under 45 min old): a second start never kills a live run.
+for p in "${plist[@]}"; do
+  source /usr/local/bin/claude-profile-env "$p"
+  for id in $(cd "$dir" && "$claude" agents --json --all 2>/dev/null | jq -r --arg p "routine: $name " \
+               '.[] | select(.kind == "background" and ((.name // "") | startswith($p))) | .id'); do
+    st="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id/state.json"; f=$([ -f "$st" ] && jq -r '.linkScanPath // empty' "$st" || true)
+    if [ -f "$st" ] && [ -f "$f" ] && live_run "$st" "$f"; then
+      echo "claude-routine: $name not started, run $id ($p) is still working (last record $(( ($(date +%s) - $(newest_record "$f")) / 60 )) min ago); it is left alone"
+      exit 0
+    fi
+  done
+done
+for p in "${plist[@]}"; do
+  source /usr/local/bin/claude-profile-env "$p"
+  for id in $(cd "$dir" && "$claude" agents --json --all 2>/dev/null | jq -r --arg p "routine: $name " \
+               '.[] | select(.kind == "background" and ((.name // "") | startswith($p))) | .id'); do
+    "$claude" stop "$id" >/dev/null 2>&1 || true
+    gone=0; for _ in 1 2 3 4 5; do "$claude" rm "$id" >/dev/null 2>&1 && { gone=1; break; }; sleep 2; done
+    if [ $gone = 1 ]; then echo "removed previous run $id ($p)"; else
+      : >"$L/given-up-$id"; echo "could not remove previous run $id ($p); it is stopped and kept"; fi
+  done
+done
+# Previous worktrees of this routine. A dirty or unpushed one is kept (moved aside, so the fixed path is free)
+# and reported; the founder's clean-up is "ask a Claude session", not a guess here.
+for w in "$W/$name" "$W/$name"-*; do
+  [ -d "$w" ] || continue
+  if wt_clean "$w"; then wt_remove "$w"; echo "removed worktree $w"
+  elif [ "$w" = "$W/$name" ]; then
+    kept="$W/$name-kept-$(date -u +%Y%m%d-%H%M)"; git -C "$w" worktree move "$w" "$kept" 2>/dev/null || mv "$w" "$kept"
+    echo "kept $kept: it has work that is not on GitHub"
+    notify "$(title_of "$name") — you need to: ask a Claude session to recover unsaved work (do not delete it)."$'\n'"The last run left work only on the server, not on GitHub. Folder: $kept"
+  else echo "kept $w: it has work that is not on GitHub"; fi
+done
+
+# The first listed account with usage left (probe_ok). A single profile is used as is.
+profile=""
+for p in "${plist[@]}"; do
+  source /usr/local/bin/claude-profile-env "$p"
+  [ ${#plist[@]} -gt 1 ] || { profile=$p; break; }
+  if probe_ok; then profile=$p; break; fi
+  echo "skip $(probe_msg "$p")"
+  [ "$probe_why" != auth ] || notify "$(title_of "$name") — you need to: run /login for the $(label_of "$p") account in the Claude app or on the server."$'\n'"Its login expired, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
+done
+[ -n "$profile" ] || { why="no Claude account answered with usage left (out of usage, signed out or overloaded; see the journal)"; need="nothing now. Start it by hand once an account has usage again, if you want it before the next scheduled run.";  echo "claude-routine: $name not started, no account ($profiles) answered with usage left" >&2; exit 75; }
+source /usr/local/bin/claude-profile-env "$profile"
+if [ "$MODE" = print ]; then
+  # No --bg session: run once, headless, and send the final stdout ourselves. The model only prints.
+  started=1; cd "$dir"
+  err=$(mktemp); trap 'rm -f "$err"' EXIT
+  rc=0; out=$(timeout 600 "$claude" -p "$@" -- "$(cat "$prompt")" </dev/null 2>"$err") || rc=$?
+  if [ $rc -eq 0 ] && [ -n "${out//[[:space:]]/}" ] && [[ "${out,,}" != *"hit your"*limit* ]]; then
+    printf '%s\n' "$out"
+    printf '%s' "$out" | /usr/local/bin/claude-notify
+    exit 0
+  fi
+  detail=$(printf '%s %s' "$out" "$(cat "$err")" | tr '\n' ' ' | cut -c1-200)
+  echo "claude-routine: $name print run failed (exit $rc): $detail" >&2
+  notify "$(title_of "$name") — nothing needed from you unless it happens again tomorrow."$'\n'"It ran ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC}) but sent no report. Error: $(cut -c1-100 <<<"${detail:-no output}")"
+  exit 1
+fi
+why="Claude's background service for the $(label_of "$profile") account is not running on the server"; need="ask in a Claude session to restart the service claude-bgd@$profile."
+bgd_ready "$profile"
+why="" need=""
+# The shared clone must be clean: every routine run branches from it.
+[ -z "$(git -C "$dir" status --porcelain)" ] || { why="the shared clone $dir has uncommitted changes"; need="ask a Claude session to clean $dir (or commit the changes), then start the routine."; exit 75; }
+timeout 120 git -C "$dir" fetch --prune --quiet origin || echo "git fetch failed; the worktree may start from an older origin"
+if [ -n "${BASE:-}" ]; then ref=origin/$BASE; else ref=$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD); fi
+wt="$W/$name"
+git -C "$dir" worktree add --detach "$wt" "$ref" >/dev/null 2>&1 || { why="git could not create the worktree $wt from $ref"; exit 1; }
+cd "$wt"
+# claude --bg refuses an untrusted folder, and trust is stored per account. The worktree path is fixed, so this
+# is one entry per account (founder, 2026-10-26).
+cfg="${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"
+if [ -f "$cfg" ] && [ "$(jq -r --arg d "$PWD" '.projects[$d].hasTrustDialogAccepted // false' "$cfg")" != true ]; then
+  tmp=$(mktemp "$cfg.XXXXXX") && jq --arg d "$PWD" '.projects[$d].hasTrustDialogAccepted = true' "$cfg" >"$tmp" \
+    && chmod --reference="$cfg" "$tmp" && mv "$tmp" "$cfg" && echo "trusted $PWD for $(label_of "$profile")"
+fi
+
+label="routine: $name $(TZ=UTC date '+%Y-%m-%d %H:%M') UTC"
+out=$(timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" -n "$label" --remote-control "$label" "$@" -- "$(cat "$prompt")" </dev/null 2>&1) || {
+  printf '%s\n' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' >&2; echo "claude-routine: $name failed to start" >&2
+  need="start it by hand from the Claude app if you want it today."; why="Claude refused to start the session on the $(label_of "$profile") account (technical detail: $(printf '%s' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr '\n' ' ' | cut -c1-140))"; exit 1; }
+started=1
+# 2026-10-27u: no "started" Telegram; the run's own "picked N tasks" message is the first one (a failed start still notifies via the EXIT trap).
+logger -t claude-routine "$name: started on $(label_of "$profile")" 2>/dev/null || true
+printf '%s\n' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | grep -m1 backgrounded || true
+echo "started $label ($profile, $repo, worktree $wt from $ref)"

@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Unpushed work in local worktrees, which holds a task: shared by the ready scripts and claim-branch --resume.
+
+worktree-holds <repo_dir> <branch> [--exclude <path>] [--pushed <sha>]...
+  Prints one line per worktree of <repo_dir> on <branch> with uncommitted files or unpushed commits whose last change
+  is under HOLD_HOURS old, skipping the worktree that contains --exclude (the caller's own). Commits that a --pushed
+  sha contains count as pushed. Exit 3 if any worktree holds the branch, 0 if none.
+worktree-holds --clean <worktree>
+  Exit 0 if nothing in the worktree exists only on this disk (no uncommitted files, every commit on a remote branch
+  or in the head of a PR for its branch, so a squash-merged worktree is clean); else prints why and exits 3. Also
+  exits 3 when gh fails: keep the worktree. Used by claude-routine and claude-clutter-clean.
+
+Worktrees under .../work/wt/ belong to routine builders (claude-routine); they never hold a task, the next run
+resumes them (2026-10-29: a dead builder's dirty wt/push-t145 kept the ready script from T-145 for 72 h).
+
+2026-10-29: a phone session stopped on the usage limit with T-139/T-205/T-214/T-247 unpushed in VPS worktrees;
+their 12h claims would have expired and the nightly routine would have rebuilt all four from the claim commit.
+Tests: ../ready/test_claim_branch.py.
+"""
+import argparse
+import contextlib
+import datetime
+import os
+import re
+import subprocess
+import sys
+
+HOLD_HOURS = 72   # unpushed work in a worktree holds its task; an abandoned worktree stops holding after this
+FEAT_RE = r"^(?:origin/)?feat/t\d"
+ROUTINE_WT_RE = r"/work/wt/"   # routine-owned worktrees (claude-routine); phone and laptop ones live elsewhere
+
+
+def git(path, *args):
+    r = subprocess.run(["git", "-C", path, *args], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def worktree_branches(repo_dir):
+    """[(path, local branch)] for every worktree of repo_dir that has a branch checked out."""
+    entries, path = [], None
+    for line in (git(repo_dir, "worktree", "list", "--porcelain") or "").splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree "):]
+        elif line.startswith("branch refs/heads/") and path:
+            entries.append((path, line[len("branch refs/heads/"):]))
+    return entries
+
+
+def worktree_state(path, pr_heads=()):
+    """(uncommitted files, unpushed commits, hours since the last change), or None if git fails. Commits that
+    a PR head on GitHub contains (pr_heads) count as pushed: a merged PR's branch is deleted, so @{u} is gone."""
+    status = git(path, "status", "--porcelain", "-z", "--untracked-files=all")
+    if status is None:
+        return None
+    files, toks = [], status.split("\0")
+    i = 0
+    while i < len(toks):
+        tk = toks[i]
+        i += 1
+        if len(tk) < 4:
+            continue
+        if not (tk[:2] == "??" and tk[3:].rstrip("/") == "node_modules"):  # builders symlink the shared one
+            files.append(tk[3:])
+        if "R" in tk[:2] or "C" in tk[:2]:
+            i += 1  # -z puts a rename's source path in the next field
+    ahead = git(path, "rev-list", "--count", "@{u}..HEAD")
+    if ahead is None:  # no upstream: count commits on no remote branch
+        ahead = git(path, "rev-list", "--count", "HEAD", "--not", "--remotes")
+    ahead = int((ahead or "0").strip() or 0)
+    if ahead and any(git(path, "merge-base", "--is-ancestor", "HEAD", oid) is not None for oid in pr_heads):
+        ahead = 0
+    times = []
+    for f in files:
+        full = os.path.join(path, f)
+        with contextlib.suppress(OSError):
+            # a deleted file: its directory's mtime is the time of the delete
+            times.append(os.path.getmtime(full if os.path.lexists(full) else os.path.dirname(full)))
+    if ahead:
+        ct = (git(path, "log", "-1", "--format=%ct") or "").strip()
+        if ct.isdigit():
+            times.append(int(ct))
+    now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    hours = (now - max(times)) / 3600 if times else 9999.0
+    return len(files), ahead, hours
+
+
+def contains(path, inner):
+    path, inner = os.path.realpath(path), os.path.realpath(inner)
+    return inner == path or inner.startswith(path.rstrip("/") + "/")
+
+
+def worktree_holds(repo_dir, entries=None, state=worktree_state, pr_heads=None, exclude=None):
+    """Local branch -> [reason], for each feat/t* worktree with unpushed commits or uncommitted changes whose
+    last change is under HOLD_HOURS old. That work exists only on this disk; rebuilding the task duplicates it."""
+    holds = {}
+    for path, branch in (worktree_branches(repo_dir) if entries is None else entries):
+        if not re.match(FEAT_RE, branch) or re.search(ROUTINE_WT_RE, path) or (exclude and contains(path, exclude)):
+            continue
+        st = state(path, (pr_heads or {}).get(branch, ()))
+        if not st:
+            continue
+        dirty, ahead, hours = st
+        if (dirty or ahead) and hours < HOLD_HOURS:
+            holds.setdefault(branch, []).append(
+                f"unpushed work in worktree {path}: {ahead} commit(s) ahead, "
+                f"{dirty} uncommitted file(s), last change {hours:.1f}h ago (held < {HOLD_HOURS}h)")
+    return holds
+
+
+def pr_heads_for(path):
+    """Head commits of every PR (any state) for the worktree's branch, via gh in the worktree; None if gh fails."""
+    branch = (git(path, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()
+    if not branch:
+        return []   # detached (the routine lead): only a remote branch can hold its commits
+    try:
+        r = subprocess.run(["gh", "pr", "list", "--state", "all", "--head", branch, "--json", "headRefOid",
+                            "--jq", ".[].headRefOid"], cwd=path, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout.split() if r.returncode == 0 else None
+
+
+def clean(path):
+    """Reasons the worktree holds work that exists only on this disk ([] = safe to remove)."""
+    st = worktree_state(path)
+    if st is None:
+        return ["git failed in the worktree"]
+    if st[1]:   # unpushed by the remotes' count: ask GitHub whether a PR head has them
+        heads = pr_heads_for(path)
+        if heads is None:
+            return ["could not ask GitHub (gh failed) whether its commits are in a PR"]
+        st = worktree_state(path, heads)
+    dirty, ahead, _ = st
+    return [f"{ahead} commit(s) not on GitHub, {dirty} uncommitted file(s)"] if dirty or ahead else []
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if len(argv) == 2 and argv[0] == "--clean":
+        reasons = clean(argv[1])
+        for r in reasons:
+            print(r)
+        return 3 if reasons else 0
+    ap = argparse.ArgumentParser(description="Unpushed work in worktrees of a repo, on one branch.")
+    ap.add_argument("repo_dir")
+    ap.add_argument("branch")
+    ap.add_argument("--exclude", help="skip the worktree containing this path (the caller's own)")
+    ap.add_argument("--pushed", action="append", default=[], help="a sha already on GitHub (repeatable)")
+    a = ap.parse_args(argv)
+    reasons = worktree_holds(a.repo_dir, pr_heads={a.branch: a.pushed}, exclude=a.exclude).get(a.branch, [])
+    for r in reasons:
+        print(r)
+    return 3 if reasons else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

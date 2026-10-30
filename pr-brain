@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+#
+# pr-brain — the asynchronous half of the Brain/Doer division.
+#
+# Antigravity (the doer) opens draft PRs. This sweeps every repository on the
+# machine, finds open PRs whose current head has not been gated yet, and
+# dispatches headless Claude Code to run the `pr-adversary` protocol on each:
+# re-run the gate, try to disprove "done", then approve / push a fix /
+# request changes. No human click anywhere in that loop.
+#
+# Idempotent: a PR is skipped once a marker comment for its exact head SHA
+# exists, so re-running costs nothing and a new push re-opens the gate.
+#
+# Usage:
+#   pr-brain                       # sweep all repos, act on up to $PR_BRAIN_MAX PRs
+#   pr-brain --dry-run             # list what it would act on, spend nothing
+#   pr-brain --repo ~/Projects/x   # one repo
+#   pr-brain --pr 427 --repo .     # one specific PR, ignores the marker
+#   pr-brain --list                # show discovered repos and exit
+#
+# Config:
+#   ~/.claude/pr-brain.repos   one repo path per line ('#' comments). Absent => auto-discover.
+#   ~/.claude/pr-brain.off     kill switch. Present => exit 0 immediately.
+#   PR_BRAIN_MAX               PRs per sweep (default 3)
+#   PR_BRAIN_MODEL             model for the gate (default sonnet)
+#   PR_BRAIN_BUDGET_USD        per-PR spend cap (default 5)
+#   PR_BRAIN_ROOT              where to auto-discover repos (default ~/Projects)
+#   PR_BRAIN_ENV_FILE          dotenv holding TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
+#                              Set it and every gate action is announced on Telegram.
+#                              Unset => silent (log only).
+#
+# Log: ~/.claude/pr-brain.log
+
+set -uo pipefail
+
+LOG="$HOME/.claude/pr-brain.log"
+OFF_SWITCH="$HOME/.claude/pr-brain.off"
+REPO_LIST="$HOME/.claude/pr-brain.repos"
+ROOT="${PR_BRAIN_ROOT:-$HOME/Projects}"
+MAX="${PR_BRAIN_MAX:-3}"
+MODEL="${PR_BRAIN_MODEL:-sonnet}"
+BUDGET="${PR_BRAIN_BUDGET_USD:-5}"
+# Only ever act on repositories and PRs belonging to this account. Auto-approving
+# or pushing to an upstream project's PR is not a thing this may do by accident.
+OWNER="${PR_BRAIN_OWNER:-$(gh api user --jq .login 2>/dev/null || echo __none__)}"
+MARKER_PREFIX="<!-- brain-reviewed:"
+
+DRY_RUN=0
+ONE_REPO=""
+ONE_PR=""
+LIST_ONLY=0
+
+# Always both: append to the log, and print to stdout so pipes and `ssh host
+# 'pr-brain --dry-run'` show something. The cron line must therefore send stdout
+# to /dev/null — if it redirects into $LOG as well, every line lands twice and the
+# log reads as though two sweeps ran. Gating on `[[ -t 1 ]]` instead is wrong: it
+# silences exactly the non-TTY callers that need the output.
+log() {
+  local line
+  line="$(date -u '+%Y-%m-%dT%H:%M:%SZ')  $*"
+  printf '%s\n' "$line" >>"$LOG"
+  printf '%s\n' "$line"
+}
+
+# A gate that runs unattended and tells nobody is indistinguishable from a gate
+# that never ran. Every action this script takes on GitHub is announced.
+ENV_FILE="${PR_BRAIN_ENV_FILE:-}"
+notify() {
+  [[ -n "$ENV_FILE" && -f "$ENV_FILE" ]] || return 0
+  local token chat
+  token=$(grep -m1 '^TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'\r')
+  chat=$(grep -m1 '^TELEGRAM_CHAT_ID=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'\r')
+  [[ -n "$token" && -n "$chat" ]] || return 0
+  curl -s -o /dev/null --max-time 20 \
+    "https://api.telegram.org/bot${token}/sendMessage" \
+    --data-urlencode "chat_id=${chat}" \
+    --data-urlencode "text=$1" \
+    --data "disable_web_page_preview=true" || true
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --repo) ONE_REPO="${2:-}"; shift 2 ;;
+    --pr) ONE_PR="${2:-}"; shift 2 ;;
+    --list) LIST_ONLY=1; shift ;;
+    -h|--help) sed -n '3,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "pr-brain: unknown argument '$1' (try --help)" >&2; exit 2 ;;
+  esac
+done
+
+if [[ -f "$OFF_SWITCH" ]]; then
+  log "kill switch present ($OFF_SWITCH) — nothing dispatched"
+  exit 0
+fi
+
+# A gate can outlast the 20-minute cron interval. Without a lock the next tick
+# starts a second sweep on the same PR — the marker comment is only written at
+# the END of a gate, so it cannot prevent an overlap, only a repeat. mkdir is the
+# portable atomic test-and-set (flock is absent on macOS).
+LOCK="$HOME/.claude/pr-brain.lock"
+if [[ "$DRY_RUN" -eq 0 && "$LIST_ONLY" -eq 0 ]]; then
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    # A crashed sweep would otherwise wedge the gate forever. Two hours is well
+    # past any legitimate run.
+    if [[ -n "$(find "$LOCK" -maxdepth 0 -mmin +120 2>/dev/null)" ]]; then
+      log "stale lock older than 120m — reclaiming"
+      rm -rf "$LOCK" && mkdir "$LOCK" 2>/dev/null || { log "could not reclaim lock"; exit 0; }
+    else
+      log "another sweep is running ($LOCK) — this tick does nothing"
+      exit 0
+    fi
+  fi
+  trap 'rm -rf "$LOCK"' EXIT
+fi
+
+for dep in gh claude git; do
+  command -v "$dep" >/dev/null 2>&1 || { log "FATAL: '$dep' not on PATH"; exit 1; }
+done
+gh auth status >/dev/null 2>&1 || { log "FATAL: gh is not authenticated"; exit 1; }
+
+# Keep the log bounded — this runs every 20 minutes forever.
+if [[ -f "$LOG" ]] && [[ "$(wc -l <"$LOG")" -gt 20000 ]]; then
+  tail -n 5000 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+
+# Preflight the model auth. Without this the sweep fails once per PR, twenty
+# minutes apart, forever, and the only symptom is a log nobody reads. An
+# unattended loop that cannot do its job must say so in one unmistakable line.
+if [[ "$DRY_RUN" -eq 0 && "$LIST_ONLY" -eq 0 ]]; then
+  preflight=$(claude -p "reply with the single word ok" --model "$MODEL" \
+                --max-budget-usd 0.05 --output-format text 2>&1 | tail -2)
+  case "$preflight" in
+    *"authenticate"*|*401*|*"Invalid API key"*)
+      log "FATAL: Claude Code cannot authenticate — every gate would fail silently."
+      log "       Fix: run 'claude' interactively, then '/login'. Sweep aborted, nothing dispatched."
+      notify "🧠 pr-brain STOPPED on $(hostname -s): Claude Code auth expired. No PR is being gated until someone runs 'claude' then '/login'."
+      exit 1
+      ;;
+  esac
+fi
+
+# ---------------------------------------------------------------- repositories
+
+discover_repos() {
+  if [[ -n "$ONE_REPO" ]]; then
+    printf '%s\n' "$(cd "$ONE_REPO" && pwd)"
+    return
+  fi
+  if [[ -f "$REPO_LIST" ]]; then
+    grep -vE '^\s*(#|$)' "$REPO_LIST" | while read -r line; do
+      dir="${line/#\~/$HOME}"
+      [[ -d "$dir/.git" ]] && printf '%s\n' "$dir"
+    done
+    return
+  fi
+  # Auto-discover: any immediate child of $ROOT that is a git repo whose origin
+  # belongs to $OWNER. The owner check is not cosmetic — without it a sweep would
+  # happily approve and push to pull requests in cloned upstream repositories.
+  for dir in "$ROOT"/*/; do
+    [[ -d "$dir/.git" ]] || continue
+    remote=$(git -C "$dir" remote get-url origin 2>/dev/null || true)
+    [[ "$remote" == *github.com* ]] || continue
+    case "$remote" in
+      *"github.com/$OWNER/"*|*"github.com:$OWNER/"*) printf '%s\n' "${dir%/}" ;;
+    esac
+  done
+}
+
+# macOS ships bash 3.2 — no mapfile, and `set -u` trips on empty arrays. A
+# newline-delimited string is the portable option here.
+REPOS=$(discover_repos)
+REPO_COUNT=$(printf '%s' "$REPOS" | grep -c . || true)
+
+if [[ "$LIST_ONLY" -eq 1 ]]; then
+  printf 'pr-brain would sweep %s repo(s):\n' "$REPO_COUNT"
+  printf '%s\n' "$REPOS" | sed 's/^/  /'
+  exit 0
+fi
+
+if [[ "$REPO_COUNT" -eq 0 ]]; then
+  log "no GitHub repositories found under $ROOT"
+  exit 0
+fi
+
+# ------------------------------------------------------------------ the sweep
+
+# The prompt is deliberately thin: the protocol lives in the pr-adversary skill
+# so that a fix to the protocol reaches every future sweep. A prompt that
+# restates the rules is a second copy that will drift.
+build_prompt() {
+  local pr="$1" repo_name="$2" head="$3"
+  cat <<EOF
+Act on pull request #${pr} in ${repo_name} as the brain in the Brain/Doer division.
+
+Invoke the pr-adversary skill and follow it exactly. An executor (Antigravity) wrote this PR;
+your default posture is disproof, not agreement. Green CI is a necessary condition, never the
+verdict.
+
+You are running headless and unattended. That means:
+- Finish with exactly one action taken on GitHub: approve (+ gh pr ready), push the smallest
+  correct fix to the PR branch and comment what you fixed, or request changes with a concrete
+  failure scenario. Never end with no action.
+- Never force-push, never rewrite the executor's commits, never merge to main/master.
+- If the working tree is being actively edited (agy-guard reports a live conversation), post a
+  comment saying the gate was deferred and why, and stop.
+- If you cannot verify a product-behaviour claim without running the real product, say
+  NOT VERIFIED in the review body and hand that back rather than approving it.
+- If the branch is behind its base, you may merge the base in locally to run the gate on an
+  up-to-date tree, but do not push that merge back unless it's the actual fix you're making.
+
+Then, as the last thing you do, stamp the PR's real remote head SHA so it is not re-gated
+unchanged. Use exactly this value — ${head} — not the output of 'git rev-parse HEAD', which
+reflects your local checkout and will be wrong if you merged the base in locally without pushing:
+  gh pr comment ${pr} --body "${MARKER_PREFIX} ${head} -->"
+EOF
+}
+
+acted=0
+
+while IFS= read -r repo; do
+  [[ -z "$repo" ]] && continue
+  [[ "$acted" -ge "$MAX" ]] && break
+
+  pushd "$repo" >/dev/null 2>&1 || continue
+  repo_name=$(basename "$repo")
+
+  if [[ -n "$ONE_PR" ]]; then
+    prs="$ONE_PR"
+  else
+    # Own PRs only, from a branch in this repo (never a fork), not opted out.
+    prs=$(gh pr list --state open --limit 20 \
+            --json number,headRefOid,labels,updatedAt,author,isCrossRepository \
+            --jq "sort_by(.updatedAt) | reverse | .[]
+                  | select(.isCrossRepository == false)
+                  | select(.author.login == \"$OWNER\")
+                  | select([.labels[].name] | index(\"no-brain\") | not)
+                  | \"\(.number) \(.headRefOid)\"" 2>/dev/null || true)
+  fi
+
+  [[ -z "$prs" ]] && { popd >/dev/null; continue; }
+
+  while read -r pr head; do
+    [[ -z "$pr" ]] && continue
+    [[ "$acted" -ge "$MAX" ]] && break
+
+    # A PR is gated once per head SHA. A new push re-opens it.
+    if [[ -z "$ONE_PR" ]]; then
+      head="${head:-$(gh pr view "$pr" --json headRefOid --jq .headRefOid 2>/dev/null)}"
+      if gh pr view "$pr" --json comments \
+           --jq '[.comments[].body] | join("\n")' 2>/dev/null | grep -qF "$MARKER_PREFIX $head"; then
+        log "$repo_name#$pr already gated at $head — skipped"
+        continue
+      fi
+    fi
+
+    # Resolve the real remote head fresh, right before dispatch — unconditionally,
+    # covering --pr mode too (where the check block above is skipped and $head is
+    # otherwise empty). This is the value that gets stamped in the marker; it must
+    # never be substituted with a locally-computed 'git rev-parse HEAD' inside the
+    # session, which can reflect an unpushed local merge. That exact bug caused
+    # one PR to be re-gated every 20 minutes for 9 hours (2026-08-11/12) —
+    # the marker kept recording an unpushed merge SHA that never matched the next
+    # sweep's real headRefOid, so the "already gated" skip never fired.
+    head="$(gh pr view "$pr" --json headRefOid --jq .headRefOid 2>/dev/null)"
+    if [[ -z "$head" ]]; then
+      log "$repo_name#$pr could not resolve head SHA — skipping"
+      continue
+    fi
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log "DRY RUN would gate $repo_name#$pr (head ${head:0:8})"
+      acted=$((acted + 1))
+      continue
+    fi
+
+    log "gating $repo_name#$pr (head ${head:0:8}) model=$MODEL budget=\$$BUDGET"
+    if claude -p "$(build_prompt "$pr" "$repo_name" "$head")" \
+        --model "$MODEL" \
+        --permission-mode acceptEdits \
+        --allowedTools "Bash Read Write Edit Grep Glob TodoWrite Skill" \
+        --max-budget-usd "$BUDGET" \
+        --output-format text >>"$LOG" 2>&1; then
+      log "$repo_name#$pr gate finished"
+      # Report the verdict GitHub actually recorded, not what the run claimed.
+      #
+      # GitHub returns reviewDecision as "" (not null) when no decision exists, and it
+      # ALWAYS will here: the executor opens PRs under this same account and GitHub
+      # refuses self-approval ("Can not approve your own pull request"). So the real
+      # signal is draft→ready, and `// "..."` cannot supply it — jq's // only catches
+      # null/false, never "". Read the state in plain words or the founder gets a
+      # message with a blank where the verdict should be.
+      verdict=$(gh pr view "$pr" --json reviewDecision,isDraft,title --jq '
+                  (if   .reviewDecision == "CHANGES_REQUESTED" then "CHANGES REQUESTED — blocked"
+                   elif .reviewDecision == "APPROVED"          then "APPROVED"
+                   elif .isDraft                               then "REVIEWED, left as draft — not cleared"
+                   else "CLEARED — marked ready for merge (self-approval impossible; ready IS the pass)"
+                   end) + " · " + .title' 2>/dev/null \
+                || echo "unknown — could not read PR state")
+      log "$repo_name#$pr verdict: $verdict"
+      notify "🧠 Gate done — ${repo_name}#${pr}
+${verdict}
+$(gh pr view "$pr" --json url --jq .url 2>/dev/null)"
+    else
+      log "$repo_name#$pr gate FAILED (exit $?) — see $LOG; PR left unstamped so the next sweep retries"
+      notify "⚠️ Gate FAILED to complete — ${repo_name}#${pr}. Left unstamped; next sweep retries. Log: ~/.claude/pr-brain.log"
+    fi
+    acted=$((acted + 1))
+  done <<<"$prs"
+
+  popd >/dev/null
+done <<<"$REPOS"
+
+log "sweep complete — $acted PR(s) acted on (max $MAX)"

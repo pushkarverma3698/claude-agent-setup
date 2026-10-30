@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+#
+# session-brief — Claude Code SessionStart hook (2026-10-27). Stdout becomes the new session's
+# context: repo state, what landed in the last 36h, open PRs, and the brain's recent decisions
+# and bugs, so a fresh session starts knowing what just happened. Registered for "startup" and
+# "clear" only (not resume/compact, which already carry context).
+#
+# Installed on the laptop (~/.claude/settings.json) and, through sync-agent-rules, on the VPS at
+# /opt/agent-rules/hooks/session-brief for the claude-agent profiles.
+#
+# Never fails the session: exit 0 always, whole run under ~6s, output at most 40 lines. Every
+# network step has a timeout; fetch, gh and the brain call run in parallel.
+#
+# Settings come from ~/.config/claude-agent-setup/env (AGENT_SETUP_ENV overrides), all optional:
+#   BRIEF_BRAIN_FILE     file with the brain MCP hub host (line 1) and bearer token (line 2), mode 0600
+#   BRIEF_BRAIN_SSH      ssh host to run the brain call on when that file is absent (laptop case)
+#   BRIEF_BRAIN_ENV      file on that host defining HUB_HTTP_HOST and HUB_HTTP_BRAIN_TOKEN
+#   BRIEF_TAG_ALIASES    "glob=tag ..." mapping repo names to brain project tags, e.g. "web-*=web"
+#   BRIEF_BASES          "repo=branch ..." for repos that integrate on a branch other than beta/main
+# Brain access (MCP hub, Streamable HTTP, stateless, bearer token). Over ssh the token stays on the
+# remote host; it is never printed or put in argv. No brain settings = no brain section.
+#   - Tool: recent_memories(project, days, limit) when the hub has it, else search_memory.
+# Testing: SESSION_BRIEF_NO_BRAIN=1 skips the brain; SESSION_BRIEF_NO_PULL=1 never pulls.
+set -uo pipefail
+_env="${AGENT_SETUP_ENV:-$HOME/.config/claude-agent-setup/env}"
+# shellcheck disable=SC1090
+[ -r "$_env" ] && { _keep=$(export -p); . "$_env"; eval "$_keep"; }
+BRIEF_BRAIN_FILE="${BRIEF_BRAIN_FILE:-}"; BRIEF_BRAIN_FILE="${BRIEF_BRAIN_FILE/#\~/$HOME}"
+PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+# portable timeout: GNU timeout / gtimeout, else perl alarm
+if command -v timeout >/dev/null 2>&1; then to() { timeout "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then to() { gtimeout "$@"; }
+else to() { local s="$1"; shift; perl -e 'alarm shift; exec @ARGV' "$s" "$@"; }; fi
+
+# ---- hook input (JSON on stdin: cwd, source). Optional; a terminal run has none ----
+cwd="$PWD"
+if [ ! -t 0 ]; then
+  in=$(to 1 cat 2>/dev/null || true)
+  if [ -n "$in" ] && command -v jq >/dev/null 2>&1; then
+    c=$(printf '%s' "$in" | jq -r '.cwd // empty' 2>/dev/null || true)
+    [ -n "$c" ] && [ -d "$c" ] && cwd="$c"
+  fi
+fi
+cd "$cwd" 2>/dev/null || { echo "session-brief: cannot enter $cwd"; exit 0; }
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "session-brief: $(basename "$cwd") is not a git repo; no repo brief."
+  exit 0
+fi
+
+tmp=$(mktemp -d 2>/dev/null) || exit 0
+# output cap: everything goes to a file, the first 40 lines are printed at exit
+exec 3>&1 >"$tmp/out"
+trap 'head -40 "$tmp/out" >&3; rm -r "$tmp" 2>/dev/null; exit 0' EXIT
+top=$(git rev-parse --show-toplevel)
+gitdir=$(cd "$(git rev-parse --git-dir)" && pwd -P)
+common=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
+linked=0; [ "$gitdir" != "$common" ] && linked=1
+if [ "$linked" = 1 ]; then repo=$(basename "$(dirname "$common")"); else repo=$(basename "$top"); fi
+tag=$(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]')
+for a in ${BRIEF_TAG_ALIASES:-}; do
+  # shellcheck disable=SC2254
+  case "$tag" in ${a%%=*}) tag=${a#*=}; break ;; esac
+done
+
+# ---- brain + gh start now, in the background ----
+brain_sh='
+set -u
+umask 077
+h=$(mktemp) || exit 0; trap "rm -f $h" EXIT
+printf "Authorization: Bearer %s\n" "$TOK" > "$h"
+while IFS= read -r p; do
+  r=$(printf "%s" "$p" | curl -s -m 3 -H @"$h" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d @- "http://$HOST:3100/mcp") || { echo "{\"curl\":\"failed\"}"; break; }
+  printf "%s\n" "$r"
+  case "$r" in *"\"error\""*|*"\"isError\":true"*) ;; *) break ;; esac
+done'
+brain_run() { # payload lines on stdin -> response lines on stdout
+  local f="$BRIEF_BRAIN_FILE"
+  if [ -n "$f" ] && [ -r "$f" ]; then
+    HOST=$(sed -n 1p "$f") TOK=$(sed -n 2p "$f") to 5 sh -c "$brain_sh"
+  elif [ -n "${BRIEF_BRAIN_SSH:-}" ] && [ -n "${BRIEF_BRAIN_ENV:-}" ] && command -v ssh >/dev/null 2>&1; then
+    to 5 ssh -o BatchMode=yes -o ConnectTimeout=3 \
+      -o ControlMaster=auto -o ControlPath="$HOME/.ssh/cm-brief-%C" -o ControlPersist=60 "$BRIEF_BRAIN_SSH" \
+      ". $BRIEF_BRAIN_ENV"' && HOST="$HUB_HTTP_HOST" TOK="$HUB_HTTP_BRAIN_TOKEN" sh -c '"'$brain_sh'"
+  else
+    echo '{"curl":"brain not configured"}'
+  fi
+}
+if [ -z "${SESSION_BRIEF_NO_BRAIN:-}" ] && command -v jq >/dev/null 2>&1; then
+  (
+    p1=$(jq -nc --arg p "$tag" '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:"recent_memories",arguments:{project:$p,days:14,limit:8}}}')
+    p2=$(jq -nc --arg p "$tag" '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"search_memory",arguments:{query:"decision bug",project:$p,limit:8}}}')
+    printf '%s\n%s\n' "$p1" "$p2" | brain_run > "$tmp/brain.raw" 2>"$tmp/brain.err"
+  ) &
+  bpid=$!
+fi
+if command -v gh >/dev/null 2>&1; then
+  ( to 3 gh pr list --limit 8 --json number,title,headRefName,isDraft \
+      --jq '.[] | "#\(.number)\(if .isDraft then " draft" else "" end) \(.headRefName): \(.title)"' \
+      > "$tmp/gh.out" 2>"$tmp/gh.err" ) &
+  gpid=$!
+fi
+
+# ---- repo state ----
+branch=$(git symbolic-ref --short -q HEAD || echo "(detached $(git rev-parse --short HEAD))")
+dirty=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
+
+to 4 git fetch --prune --quiet >"$tmp/fetch.out" 2>&1; frc=$?
+
+base=""
+# a repo listed in BRIEF_BASES integrates on its own branch; its `beta` is not the base
+own=""; for a in ${BRIEF_BASES:-}; do [ "${a%%=*}" = "$repo" ] && own=${a#*=}; done
+for b in $own beta main master; do
+  if git show-ref --verify --quiet "refs/remotes/origin/$b"; then base="$b"; break; fi
+done
+[ -z "$base" ] && base=$(git symbolic-ref --short -q refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+
+ahead=0; behind=0; sync="no upstream"
+if [ -n "$upstream" ]; then
+  read -r ahead behind < <(git rev-list --left-right --count "HEAD...$upstream" 2>/dev/null || echo "0 0")
+  sync="ahead $ahead / behind $behind vs $upstream"
+fi
+wt=""; [ "$linked" = 1 ] && wt=" (linked worktree)"
+echo "== session-brief: $repo @ $branch$wt | dirty files: $dirty | $sync"
+[ "$frc" -ne 0 ] && echo "fetch: failed or timed out (rc=$frc); remote info below may be stale"
+
+# ---- pull, only when safe ----
+if [ -n "$upstream" ] && [ "$behind" -gt 0 ]; then
+  if [ -n "${SESSION_BRIEF_NO_PULL:-}" ]; then
+    echo "pull: skipped (SESSION_BRIEF_NO_PULL), $behind behind"
+  elif [ "$dirty" -ne 0 ]; then
+    echo "pull: skipped, tree dirty ($behind commits behind $upstream)"
+  elif [ "$ahead" -ne 0 ]; then
+    echo "pull: skipped, $ahead local-only commits and $behind behind (diverged); not merging"
+  elif [ "$linked" = 1 ] && [ "$branch" != "$base" ]; then
+    echo "pull: skipped, linked worktree on $branch; $behind commits behind $upstream"
+  else
+    old=$(git rev-parse --short HEAD)
+    if to 4 git pull --ff-only --quiet >"$tmp/pull.out" 2>&1; then
+      echo "pull: fast-forwarded $old..$(git rev-parse --short HEAD), $behind new commits:"
+      git log --format='  %h %s' "$old..HEAD" 2>/dev/null | cut -c1-110 | head -5
+    else
+      echo "pull: ff-only failed ($(head -1 "$tmp/pull.out" | cut -c1-80))"
+    fi
+  fi
+fi
+
+# ---- base branch, last 36h ----
+if [ -n "$base" ]; then
+  echo "-- origin/$base, last 36h:"
+  n=$(git log "origin/$base" --since='36 hours ago' --format='%h' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$n" -eq 0 ]; then echo "  (no commits)"; else
+    git log "origin/$base" --since='36 hours ago' --max-count=10 --format='  %h %ar: %s' 2>/dev/null | cut -c1-120
+    [ "$n" -gt 10 ] && echo "  ... and $((n - 10)) more"
+  fi
+else
+  echo "-- no origin base branch found"
+fi
+
+# ---- PRs ----
+if [ -n "${gpid:-}" ]; then
+  wait "$gpid" 2>/dev/null
+  if [ -s "$tmp/gh.out" ]; then echo "-- open PRs:"; cut -c1-120 "$tmp/gh.out" | sed 's/^/  /'
+  elif [ -s "$tmp/gh.err" ]; then echo "-- PRs: gh unavailable ($(head -1 "$tmp/gh.err" | cut -c1-60))"
+  else echo "-- open PRs: none"; fi
+fi
+
+# ---- live work: branches pushed in the last 2h by any device or session (2026-10-29: no overlap) ----
+now=$(date +%s)
+live=$(git for-each-ref --sort=-committerdate --count=30 refs/remotes/origin \
+         --format='%(committerdate:unix) %(committerdate:relative) %(refname:lstrip=3)' 2>/dev/null \
+       | awk -v n="$now" -v b="$base" -v me="$branch" '$1 > n - 7200 && $NF != b && $NF != me && $NF != "HEAD" { $1=""; print "  " substr($0, 2) }' | head -6)
+if [ -n "$live" ]; then
+  echo "-- live branches (pushed < 2h ago; someone may be on these, do not start the same task):"
+  printf '%s\n' "$live" | cut -c1-110
+fi
+
+# ---- brain ----
+if [ -n "${bpid:-}" ]; then
+  wait "$bpid" 2>/dev/null
+  reason=""; text=""
+  if [ -s "$tmp/brain.raw" ]; then
+    last=$(tail -1 "$tmp/brain.raw")
+    text=$(printf '%s' "$last" | jq -r 'if .error then empty elif .result.isError then empty else (.result.content[0].text // empty) end' 2>/dev/null || true)
+    if [ -z "$text" ]; then
+      reason=$(printf '%s' "$last" | jq -r '.error.message // .result.content[0].text // .curl // "bad response"' 2>/dev/null | head -1 | cut -c1-70)
+      [ -z "$reason" ] && reason="bad response"
+    fi
+  else
+    reason=$(grep -v 'line [0-9]*:' "$tmp/brain.err" 2>/dev/null | head -1 | cut -c1-70); [ -z "$reason" ] && reason="timeout or no answer"
+  fi
+  if [ -n "$text" ]; then
+    echo "-- brain ($tag), recent:"
+    rid=$(printf '%s' "$last" | jq -r '.id // empty' 2>/dev/null)
+    if [ "$rid" = 1 ]; then
+      printf '%s\n' "$text" | sed 's/^/  /' | head -8
+    else
+    printf '%s\n' "$text" | awk '
+      function flush() { if (have) { print "  " meta " | " title; have=0 } }
+      /^--- Result/ { flush(); st=1; meta=""; title=""; next }
+      st==1 && NF { meta=$0; sub(/ ·.*/, "", meta); st=2; next }
+      st==2 && NF { title=substr($0, 1, 110); have=1; st=3; next }
+      END { flush() }
+    ' | head -8
+    fi
+  else
+    echo "-- brain unreachable ($reason)"
+  fi
+fi
+
+echo "Next: restate the task as an outcome, then search_memory for it."
+exit 0

@@ -1,0 +1,9 @@
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+[Unit]
+Description=Hourly check for Claude routine runs stopped on the usage limit
+
+[Timer]
+OnCalendar=*-*-* *:17:00
+
+[Install]
+WantedBy=timers.target
