@@ -1,0 +1,730 @@
+#!/usr/bin/env python3
+"""tracker: one CSV task tracker per project, kept in its own GitHub repo, is the single source of truth for who works on what.
+
+  tracker sync | next [--json] | claim T-NNN [--slug s] [--worktree P] | beat T-NNN [--status S] [--pr N] [--next TXT]
+  tracker block T-NNN "<text>" --needs founder|stakeholder | done T-NNN --pr N | release T-NNN | check [T-NNN] | migrate
+  every command takes --project NAME (or $TRACKER_PROJECT) or --conf PATH.
+
+Phone, laptop and VPS routine run the same commands; only this tool writes the CSV, through `gh api` (the contents API),
+so every write is a compare-and-swap on the file sha: on a 409 the same mutation is re-applied to the fresh file, which
+re-validates it (a claim on a row someone took meanwhile fails with exit 3 instead of overwriting). The CSV is kept
+byte-for-byte except the rows a command changed. Config is <project>.conf (a bash fragment) found in $TRACKER_CONF_DIR,
+/etc/claude-routines or $AGENT_OVERLAY_DIR/claude-routines; keys are read in ../../README.md's tracker section.
+A row is HELD while it is active, has a holder and was updated less than LEASE_HOURS ago; an active row past that, or with
+no holder, is a LEFTOVER and must be taken (claim --resume) before any new task. Claiming also writes <git dir>/tracker-claim
+in the worktree, which `check` (push hooks) reads to stop a session whose row someone else took over.
+Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder.
+"""
+import argparse, base64, csv, datetime as dt, io, json, math, os, random, re, secrets, shlex, shutil, socket, subprocess, sys, time
+import urllib.parse
+
+AGENT_COLS = ["Holder", "Environment", "Run", "Branch", "PR", "Blocker", "Next step", "Updated"]
+STATUSES = ["Not started", "Claimed", "Building", "In review", "Waiting", "Blocked", "Done"]
+ACTIVE = {"Claimed", "Building", "In review", "Waiting"}
+FMT = "%Y-%m-%dT%H:%MZ"
+
+
+class Fail(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+
+
+def log(msg):
+    print(f"tracker: {msg}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------- config
+def bash_vars(path, names):
+    script = 'source "$1" >/dev/null 2>&1; shift; for v in "$@"; do printf "%s=%s\\0" "$v" "${!v-}"; done'
+    r = subprocess.run(["bash", "-c", script, "_", path, *names], capture_output=True, text=True)
+    return dict(kv.split("=", 1) for kv in r.stdout.split("\0") if "=" in kv)
+
+
+def conf_dirs():
+    dirs = [os.environ.get("TRACKER_CONF_DIR", ""), "/etc/claude-routines"]
+    overlay = os.environ.get("AGENT_OVERLAY_DIR", "")
+    envfile = os.environ.get("AGENT_SETUP_ENV") or os.path.expanduser("~/.config/claude-agent-setup/env")
+    if not overlay and os.path.isfile(envfile):
+        overlay = bash_vars(envfile, ["AGENT_OVERLAY_DIR"]).get("AGENT_OVERLAY_DIR", "")
+    if overlay:
+        dirs.append(os.path.join(os.path.expanduser(overlay), "claude-routines"))
+    return [d for d in dirs if d and os.path.isdir(d)]
+
+
+def repo_of_url(url):
+    m = re.search(r"[:/]([^/:]+/[^/]+?)(?:\.git)?/?$", url.strip())
+    return m.group(1) if m else ""
+
+
+KEYS = ["TRACKER_REPO", "TRACKER_PATH", "TRACKER_BRANCH", "CODE_REPO", "REPO_DIR", "WORK_BASE", "WORKTREE_ROOT", "BRANCH_FMT",
+        "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE",
+        "LEASE_HOURS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
+
+
+def load_conf(args, project_hint=""):
+    path = args.conf
+    project = args.project or os.environ.get("TRACKER_PROJECT") or project_hint
+    if not path and project:
+        path = next((os.path.join(d, project + ".conf") for d in conf_dirs() if os.path.isfile(os.path.join(d, project + ".conf"))), None)
+        if not path:
+            raise Fail(2, f"no {project}.conf in {conf_dirs() or 'any config dir (set TRACKER_CONF_DIR)'}")
+    if not path:  # no project given: the conf whose CODE_REPO is this checkout's origin
+        r = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        here = repo_of_url(r.stdout) if r.returncode == 0 else ""
+        hits = [os.path.join(d, f) for d in conf_dirs() for f in sorted(os.listdir(d)) if f.endswith(".conf")
+                and here and bash_vars(os.path.join(d, f), ["CODE_REPO"]).get("CODE_REPO") == here]
+        if len(hits) != 1:
+            raise Fail(2, "pass --project NAME or --conf PATH" + (f" ({'several confs match' if hits else 'no conf matches'} {here or 'this directory'})"))
+        path = hits[0]
+    if not os.path.isfile(path):
+        raise Fail(2, f"no such conf: {path}")
+    c = {k: v for k, v in bash_vars(path, KEYS).items() if v != ""}
+    c["PROJECT"] = project or os.path.basename(path)[:-5]
+    c["CONF"] = os.path.abspath(path)
+    for k in ("TRACKER_REPO", "TRACKER_PATH", "CODE_REPO", "WORK_BASE"):
+        if k not in c:
+            raise Fail(2, f"{path}: {k} is not set")
+    d = {"TRACKER_BRANCH": "main", "BRANCH_FMT": "feat/t{num}-{slug}", "ID_COL": "Task ID", "ID_RE": r"T-\d+", "TITLE_COL": "Title",
+         "STATUS_COL": "Status", "DEPS_COL": "Depends on", "ORDER_COLS": "Milestone", "LEASE_HOURS": "6", "NOTIFY_CMD": "claude-notify"}
+    for k, v in d.items():
+        c.setdefault(k, v)
+    name = c["CODE_REPO"].split("/")[-1]
+    c.setdefault("REPO_DIR", next((p for p in (os.path.expanduser(f"~/work/{name}"), os.path.expanduser(f"~/Projects/{name}")) if os.path.isdir(p)), ""))
+    if c["REPO_DIR"]:
+        c.setdefault("WORKTREE_ROOT", os.path.join(c["REPO_DIR"], ".claude", "worktrees"))
+    c["cols"] = {a: c.get("COL_" + a.upper().replace(" ", "_"), a) for a in AGENT_COLS} | {"Status": c["STATUS_COL"]}
+    c["lease"] = dt.timedelta(hours=float(c["LEASE_HOURS"]))
+    return c
+
+
+def identity(cfg):
+    env = os.environ.get("TRACKER_ENV") or cfg.get("TRACKER_ENV") or socket.gethostname().split(".")[0]
+    run = (os.environ.get("TRACKER_RUN") or os.environ.get("CLAUDE_CODE_HOST_SESSION_ID")
+           or os.environ.get("CLAUDE_CODE_SESSION_ID") or cfg.get("TRACKER_RUN")
+           or "manual-" + now().strftime("%Y%m%d%H%M"))
+    return env, run, f"{env}:{run}:{secrets.token_hex(3)}"
+
+
+# ---------------------------------------------------------------- time
+def now():
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def stamp(t=None):
+    return (t or now()).strftime(FMT)
+
+
+def parse_ts(s):
+    for f in (FMT, "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return dt.datetime.strptime(s.strip(), f).replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            pass
+    return None
+
+
+def ago(t):
+    s = int((now() - t).total_seconds())
+    return "just now" if s < 60 else f"{s // 60}m ago" if s < 3600 else f"{s // 3600}h ago" if s < 172800 else f"{s // 86400}d ago"
+
+
+# ---------------------------------------------------------------- GitHub
+def gh(*args, stdin=None):
+    try:
+        r = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True)
+    except FileNotFoundError:
+        raise Fail(2, "gh is not installed")
+    return r.returncode, r.stdout, r.stderr
+
+
+def gh_out(*args):
+    rc, out, err = gh(*args)
+    if rc:
+        raise Fail(2, f"gh {' '.join(args[:2])} failed: {(err or out).strip()[:300]}")
+    return out
+
+
+def json_stream(text):  # `gh api --paginate` prints one JSON array per page, back to back
+    dec, i, out = json.JSONDecoder(), 0, []
+    while i < len(text):
+        if text[i].isspace():
+            i += 1
+            continue
+        v, i = dec.raw_decode(text, i)
+        out += v if isinstance(v, list) else [v]
+    return out
+
+
+def merged_prs(cfg):
+    prs = json.loads(gh_out("pr", "list", "-R", cfg["CODE_REPO"], "--state", "merged", "--limit", "300",
+                            "--json", "number,body,headRefName,mergedAt") or "[]")
+    return sorted(prs, key=lambda p: p.get("mergedAt") or "")
+
+
+def remote_branches(cfg):
+    """{branch: sha} for every branch under the fixed prefix of BRANCH_FMT (feat/t for feat/t{num}-{slug})."""
+    prefix = cfg["BRANCH_FMT"].split("{")[0]
+    refs = json_stream(gh_out("api", "--paginate", f"repos/{cfg['CODE_REPO']}/git/matching-refs/heads/{prefix}"))
+    return {r["ref"][len("refs/heads/"):]: r["object"]["sha"] for r in refs}
+
+
+def commit_time(cfg, sha):
+    d = json.loads(gh_out("api", f"repos/{cfg['CODE_REPO']}/git/commits/{sha}"))["committer"]["date"]
+    return parse_ts(d) or now()
+
+
+# ---------------------------------------------------------------- the CSV
+class Rec:
+    def __init__(self, cells, raw):
+        self.cells, self.raw, self.dirty = cells, raw, False
+
+    def text(self):
+        if not self.dirty:
+            return self.raw
+        buf = io.StringIO()
+        csv.writer(buf, lineterminator="").writerow(self.cells)
+        m = re.search(r"(\r\n|\n|\r)$", self.raw)
+        return buf.getvalue() + (m.group(1) if m else "")
+
+
+class Table:
+    """Parsed CSV that keeps the exact text of every record nobody changed (quoting, line ends, BOM, trailing newline)."""
+    def __init__(self, text, cfg):
+        self.cfg = cfg
+        self.bom = text.startswith("﻿")
+        text = text[1:] if self.bom else text
+        self.eol = "\r\n" if "\r\n" in text else "\n"
+        lines = re.findall(r"[^\r\n]*(?:\r\n|\n|\r)|[^\r\n]+", text)
+        rd, self.recs, prev = csv.reader(iter(lines)), [], 0
+        for cells in rd:
+            self.recs.append(Rec(cells, "".join(lines[prev:rd.line_num])))
+            prev = rd.line_num
+        if not self.recs:
+            raise Fail(2, "tracker CSV is empty")
+        self.head = self.recs[0]
+        for need in (cfg["ID_COL"], cfg["STATUS_COL"]):
+            if need not in self.head.cells:
+                raise Fail(2, f"tracker CSV has no '{need}' column")
+
+    def dump(self):
+        return ("﻿" if self.bom else "") + "".join(r.text() for r in self.recs)
+
+    def missing(self):
+        return [self.cfg["cols"][a] for a in AGENT_COLS if self.cfg["cols"][a] not in self.head.cells]
+
+    def index(self, col):
+        col = self.cfg["cols"].get(col, col)
+        low = [h.lower() for h in self.head.cells]
+        return self.head.cells.index(col) if col in self.head.cells else low.index(col.lower()) if col.lower() in low else -1
+
+    def get(self, rec, col):
+        i = self.index(col)
+        return rec.cells[i].strip() if 0 <= i < len(rec.cells) else ""
+
+    def set(self, rec, col, val):
+        i = self.index(col)
+        if i < 0:
+            raise Fail(2, f"the tracker has no '{self.cfg['cols'].get(col, col)}' column: run `tracker migrate` first")
+        rec.cells += [""] * (len(self.head.cells) - len(rec.cells))
+        if rec.cells[i] != val:
+            rec.cells[i] = val
+            rec.dirty = True
+
+    def setmany(self, rec, **kv):
+        for k, v in kv.items():
+            self.set(rec, k.replace("_", " "), v)
+
+    def id_rows(self):
+        c = self.cfg
+        return [r for r in self.recs[1:] if re.fullmatch(c["ID_RE"], self.get(r, c["ID_COL"]))]
+
+    def rows(self):  # the rows that are ours (ROW_FILTER); the rest are ignored
+        f = self.cfg.get("ROW_FILTER")
+        if not f:
+            return self.id_rows()
+        col, _, val = f.partition("=")
+        return [r for r in self.id_rows() if self.get(r, col.strip()).lower() == val.strip().lower()]
+
+    def find(self, task, rows=None):
+        return next((r for r in (rows if rows is not None else self.rows()) if self.get(r, self.cfg["ID_COL"]).lower() == task.lower()), None)
+
+    def status(self, rec):
+        s = self.get(rec, self.cfg["STATUS_COL"]).lower()
+        if s.startswith("in progress"):
+            return "Building"
+        return next((x for x in STATUSES if s.startswith(x.lower())), "Not started" if not s else "Other")
+
+    def deps_unmet(self, rec):
+        done = {self.get(r, self.cfg["ID_COL"]) for r in self.id_rows() if self.status(r) == "Done"}
+        return [d for d in re.findall(self.cfg["ID_RE"], self.get(rec, self.cfg["DEPS_COL"])) if d not in done]
+
+    def blocked_by(self, rec):
+        c = self.cfg
+        m = c.get("BLOCK_COL") and c.get("BLOCK_RE") and re.search(c["BLOCK_RE"], self.get(rec, c["BLOCK_COL"]))
+        return m.group(0) if m else ""
+
+    def state(self, rec):
+        st = self.status(rec)
+        if st == "Done":
+            return "done"
+        if st == "Blocked":
+            return "blocked"
+        if st in ACTIVE:
+            ts = parse_ts(self.get(rec, "Updated"))
+            young = ts is not None and now() - ts < self.cfg["lease"]
+            # an empty holder with a branch is a claim whose row write crashed (see reconcile): held until the lease passes
+            return "held" if young and (self.get(rec, "Holder") or self.get(rec, "Branch")) else "leftover"
+        if st == "Not started":
+            return "notready" if self.deps_unmet(rec) or self.blocked_by(rec) else "new"
+        return "other"
+
+    def order(self, rec):
+        nat = lambda s: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", s)]
+        cols = [c.strip() for c in self.cfg["ORDER_COLS"].split(",") if c.strip()]
+        return [nat(self.get(rec, c)) for c in cols] + [task_num(self.get(rec, self.cfg["ID_COL"]))]
+
+
+def task_num(task):
+    return int(re.sub(r"\D", "", task) or 0)
+
+
+def fetch(cfg):
+    out = json.loads(gh_out("api", f"repos/{cfg['TRACKER_REPO']}/contents/{urllib.parse.quote(cfg['TRACKER_PATH'])}?ref={cfg['TRACKER_BRANCH']}"))
+    if out.get("encoding") != "base64":
+        raise Fail(2, "tracker file too large for the contents API")
+    return out["sha"], Table(base64.b64decode(out["content"]).decode("utf-8"), cfg)
+
+
+def mutate(cfg, msg, fn):
+    """fn(table) -> (changed, payload) is re-run on a fresh table after every sha conflict. Returns (payload, table)."""
+    scale = float(os.environ.get("TRACKER_RETRY_SCALE", "1"))
+    for attempt in range(6):
+        sha, table = fetch(cfg)
+        changed, payload = fn(table)
+        if not changed:
+            return payload, table
+        body = json.dumps({"message": msg, "content": base64.b64encode(table.dump().encode("utf-8")).decode(), "sha": sha,
+                           "branch": cfg["TRACKER_BRANCH"]})
+        rc, out, err = gh("api", "-X", "PUT", f"repos/{cfg['TRACKER_REPO']}/contents/{urllib.parse.quote(cfg['TRACKER_PATH'])}", "--input", "-", stdin=body)
+        if rc == 0:
+            return payload, table
+        text = out + err
+        if not ("HTTP 409" in text or ("HTTP 422" in text and "sha" in text.lower())):
+            raise Fail(2, f"writing the tracker failed: {text.strip()[:300]}")
+        if attempt == 5:
+            raise Fail(2, "tracker changed under us 6 times in a row, giving up")
+        log(f"sha conflict, retry {attempt + 1}/5")
+        time.sleep(random.uniform(0.2, 1.5) * scale)
+
+
+# ---------------------------------------------------------------- claim file
+def git_dir(path):
+    r = subprocess.run(["git", "-C", path, "rev-parse", "--absolute-git-dir"], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def read_claim(gd):
+    try:
+        with open(os.path.join(gd, "tracker-claim")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def worktree_of(repo_dir, branch):
+    r = subprocess.run(["git", "-C", repo_dir, "worktree", "list", "--porcelain"], capture_output=True, text=True)
+    path = None
+    for line in r.stdout.splitlines():
+        if line.startswith("worktree "):
+            path = line[9:]
+        elif line == f"branch refs/heads/{branch}":
+            return path
+    return None
+
+
+def find_claim(cfg, task, table=None):
+    """The claim for `task`: the cwd's git dir first, else the worktree of REPO_DIR that has the row's Branch checked out."""
+    gd = git_dir(os.getcwd())
+    c = gd and read_claim(gd)
+    if c and c.get("task") == task:
+        return c, gd
+    rec = table.find(task) if table else None
+    branch = table.get(rec, "Branch") if rec else ""
+    wt = branch and cfg.get("REPO_DIR") and worktree_of(cfg["REPO_DIR"], branch)
+    gd = wt and git_dir(wt)
+    c = gd and read_claim(gd)
+    return (c, gd) if c and c.get("task") == task else (None, None)
+
+
+def holder_guard(t, rec, task, claim, allow_unheld=False):
+    cur = t.get(rec, "Holder")
+    if claim and cur == claim["holder"] or (allow_unheld and not cur):
+        return
+    raise Fail(5, f"not your row: held by {cur or 'nobody'}" + ("" if claim else f" (no claim file for {task} here)"))
+
+
+def need_row(t, task):
+    rec = t.find(task)
+    if rec is None:
+        raise Fail(2, f"no task {task} in this tracker (or it is outside ROW_FILTER)")
+    return rec
+
+
+# ---------------------------------------------------------------- commands
+def cmd_migrate(cfg, a):
+    def fn(t):
+        miss = t.missing()
+        if miss:
+            t.head.cells += miss
+            t.head.dirty = True
+            for r in t.recs[1:]:
+                if r.cells:
+                    r.cells += [""] * (len(t.head.cells) - len(r.cells))
+                    r.dirty = True
+        return bool(miss), miss
+    miss, _ = mutate(cfg, f"tracker: migrate ({identity(cfg)[2]})", fn)
+    print("added columns: " + ", ".join(miss) if miss else "nothing to migrate")
+
+
+def ids(cfg, text):
+    return [m.group(0) for m in re.finditer(cfg["ID_RE"], text)]
+
+
+def apply_sync(t, prs):
+    """Merged PRs win: a `Closes T-1` line makes the row Done; a `Part of T-1` line (+ `Left: ...`) makes it a leftover."""
+    changes = []
+    for pr in prs:
+        n, at = pr["number"], parse_ts(pr.get("mergedAt") or "") or now()
+        closes, part, left = [], [], ""
+        for line in (pr.get("body") or "").splitlines():
+            m = re.match(r"^\s*(?:[-*+]\s+)?(?:\*\*|__)?\s*(closes|part of|left)\b[:\s*_]*(.*)$", line, re.I)
+            if m and m.group(1).lower() == "left":
+                left = m.group(2).strip(" *_") or left
+            elif m:
+                (closes if m.group(1).lower() == "closes" else part).extend(ids(t.cfg, m.group(2)))
+        for task in closes:
+            rec = t.find(task)
+            if rec is not None and t.status(rec) != "Done":
+                changes.append(f"{task} {t.status(rec)} -> Done (#{n} Closes)")
+                t.setmany(rec, Status="Done", PR=f"#{n}", Updated=stamp(at))
+        for task in part:
+            rec = t.find(task)
+            if rec is not None and t.status(rec) == "Not started":
+                changes.append(f"{task} Not started -> Building (#{n} Part of)")
+                t.setmany(rec, Status="Building", Holder="", PR=f"#{n}")
+                if left:
+                    t.set(rec, "Next step", left)
+    return changes
+
+
+def branch_re(cfg, task):
+    return re.compile(re.escape(cfg["BRANCH_FMT"]).replace(r"\{num\}", str(task_num(task))).replace(r"\{slug\}", "[^/]*"))
+
+
+def apply_reconcile(t, branches, merged_heads, cfg):
+    """A branch exists for a Not started row: the claimer died between claim-branch and the row write."""
+    changes = []
+    for rec in t.rows():
+        task = t.get(rec, cfg["ID_COL"])
+        if t.status(rec) != "Not started":
+            continue
+        rx = branch_re(cfg, task)
+        hit = next((b for b in sorted(branches) if rx.fullmatch(b) and b not in merged_heads), None)
+        if hit:
+            t.setmany(rec, Status="Claimed", Holder="", Branch=hit, Updated=stamp(commit_time(cfg, branches[hit])))
+            changes.append(f"{task} Not started -> Claimed (branch {hit} exists, row was never written)")
+    return changes
+
+
+def summary(t, rec):
+    g = lambda c: t.get(rec, c)
+    return {"task": g(t.cfg["ID_COL"]), "title": g(t.cfg["TITLE_COL"]), "status": t.status(rec), "holder": g("Holder"),
+            "environment": g("Environment"), "run": g("Run"), "branch": g("Branch"), "pr": g("PR"), "next_step": g("Next step"),
+            "blocker": g("Blocker"), "updated": g("Updated")}
+
+
+def cmd_sync(cfg, a, quiet=False):
+    prs = merged_prs(cfg)
+    changes, _ = mutate(cfg, f"tracker: sync ({identity(cfg)[2]})", lambda t: (lambda c: (bool(c), c))(apply_sync(t, prs)))
+    if not quiet:
+        print("\n".join(changes) or "nothing to sync")
+
+
+def describe(t, kind, rec):
+    d, un = summary(t, rec), t.deps_unmet(rec)
+    if kind == "leftover":
+        d["stale_since"] = d["updated"]
+    elif kind == "held":
+        ts = parse_ts(d["updated"])
+        d["lease_ends"], d["age"] = stamp(ts + t.cfg["lease"]), ago(ts)
+        d["holder"] = d["holder"] or "unknown"
+    elif kind == "notready":
+        d["reason"] = f"deps not done: {', '.join(un)}" if un else f"blocked by {t.blocked_by(rec)}"
+    return d
+
+
+def cmd_next(cfg, a):
+    prs = merged_prs(cfg)
+    heads = {p["headRefName"] for p in prs}
+    branches = remote_branches(cfg)
+
+    def fn(t):
+        ch = apply_sync(t, prs) + apply_reconcile(t, branches, heads, cfg)
+        return bool(ch), ch
+    changes, t = mutate(cfg, f"tracker: next ({identity(cfg)[2]})", fn)
+    for c in changes:
+        log(c)
+    old = dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    groups = {k: [] for k in ("leftover", "held", "blocked", "new", "notready")}
+    for rec in sorted(t.rows(), key=t.order):
+        if t.state(rec) in groups:
+            groups[t.state(rec)].append(rec)
+    groups["leftover"].sort(key=lambda r: parse_ts(t.get(r, "Updated")) or old)
+    groups["new"], groups["notready"] = groups["new"][:10], groups["notready"][:20]
+    pick = (("LEFTOVER", groups["leftover"]) if groups["leftover"] else ("NEW", groups["new"]))
+    first = pick[1][0] if pick[1] else None
+    nxt = {"kind": pick[0], "task": t.get(first, cfg["ID_COL"])} if first is not None else {"kind": "NONE"}
+    d = {k: [describe(t, k, r) for r in recs] for k, recs in groups.items()}
+    if a.json:
+        print(json.dumps({"next": nxt, "changes": changes, **d}, indent=1))
+        return
+    print(f"NEXT {nxt['kind']} {nxt.get('task', '')}".strip())
+    for x in d["leftover"]:
+        print(f"LEFTOVER {x['task']} | {x['title']} | {x['branch']} | {x['pr']} | {x['next_step']} | stale since {x['stale_since'] or 'unknown'}")
+    for x in d["held"]:
+        print(f"HELD {x['task']} | {x['holder']} | {x['environment']} | {x['run']} | updated {x['age']} | skip: held by {x['holder']} until {x['lease_ends']}")
+    for x in d["blocked"]:
+        print(f"BLOCKED {x['task']} | {x['blocker']}")
+    for x in d["new"]:
+        print(f"NEW {x['task']} | {x['title']}")
+    for x in d["notready"]:
+        print(f"NOT READY {x['task']} | {x['reason']}")
+
+
+def slugify(text, limit=40):
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", text.lower())).strip("-")[:limit].strip("-") or "task"
+
+
+def claim_branch_bin():
+    for c in (os.environ.get("TRACKER_CLAIM_BRANCH"), shutil.which("claim-branch"), os.path.join(os.path.dirname(os.path.realpath(__file__)), "claim-branch")):
+        if c and os.path.exists(c):
+            return c
+    raise Fail(2, "claim-branch not found (set TRACKER_CLAIM_BRANCH)")
+
+
+def cmd_claim(cfg, a):
+    task, idc = a.task, cfg["ID_COL"]
+    t = fetch(cfg)[1]
+    if t.missing():
+        raise Fail(2, f"the tracker has no {', '.join(t.missing())} column(s): run `tracker migrate` first")
+    rec = need_row(t, task)
+    st, g = t.state(rec), (lambda c: t.get(rec, c))
+    if st == "done" or st == "blocked" or st == "other":
+        raise Fail(2, f"{task} is {g(cfg['STATUS_COL'])}" + (f": {g('Blocker')}" if st == "blocked" else ""))
+    if st == "held":
+        ts = parse_ts(g("Updated"))
+        raise Fail(3, f"{task} is held by {g('Holder') or 'unknown'} (env {g('Environment') or '?'}, run {g('Run') or '?'}) until {stamp(ts + cfg['lease'])}")
+    if st == "notready":
+        un = t.deps_unmet(rec)
+        raise Fail(2, f"{task} is not ready: " + (f"deps not done: {', '.join(un)}" if un else f"blocked by {t.blocked_by(rec)}"))
+    leftovers = [t.get(r, idc) for r in t.rows() if t.state(r) == "leftover"]
+    if st == "new" and leftovers:
+        raise Fail(4, f"leftover first: {', '.join(leftovers)}")
+    if not cfg.get("REPO_DIR"):
+        raise Fail(2, "REPO_DIR is not set and no clone found in ~/work or ~/Projects")
+    cb, repo = claim_branch_bin(), cfg["CODE_REPO"]
+    if st == "leftover":
+        heads = {p["headRefName"] for p in merged_prs(cfg)}
+        have = remote_branches(cfg)
+        rx = branch_re(cfg, task)
+        branch = g("Branch") if g("Branch") in have else next((b for b in sorted(have) if rx.fullmatch(b) and b not in heads), "")
+    else:
+        branch = ""
+    if branch:
+        # the row lease decides who may take a leftover: claim-branch's own CLAIM_HOURS (12) must not outlive LEASE_HOURS (6),
+        # or `next` offers a leftover that `claim` then refuses. LIVE_HOURS stays: a recent real push means someone is live.
+        hours = str(math.ceil(cfg["lease"].total_seconds() / 3600))
+        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, env={**os.environ, "CLAIM_HOURS": hours})
+    else:
+        branch = base = cfg["BRANCH_FMT"].format(num=task_num(task), slug=a.slug or slugify(g(cfg["TITLE_COL"])))
+        # a kept branch of an earlier merged PR (or any live one) owns the plain name: claim-branch would refuse it as held
+        taken = set(remote_branches(cfg)) | {p["headRefName"] for p in merged_prs(cfg)}
+        n = 2
+        while branch in taken:
+            branch, n = f"{base}-{n}", n + 1
+        r = subprocess.run([cb, repo, branch, cfg["WORK_BASE"]], capture_output=True, text=True)
+    sys.stderr.write(r.stderr)
+    if r.returncode:
+        raise Fail(3 if r.returncode == 3 else 2, f"claim-branch exit {r.returncode} for {branch}")
+    rd = cfg["REPO_DIR"]
+    gitc = lambda *x, cwd=rd: subprocess.run(["git", "-C", cwd, *x], capture_output=True, text=True)
+    f = gitc("fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+    if f.returncode:
+        raise Fail(2, f"git fetch {branch} failed: {f.stderr.strip()}")
+    # a run that died earlier may have left the branch checked out at some other path: reuse it unless --worktree says otherwise
+    wt = os.path.abspath(a.worktree or worktree_of(rd, branch) or os.path.join(cfg["WORKTREE_ROOT"], branch.replace("/", "-")))
+    if worktree_of(rd, branch) != wt:
+        w = gitc("worktree", "add", "--track", "-B", branch, wt, f"origin/{branch}")
+        if w.returncode:
+            raise Fail(2, f"git worktree add failed: {w.stderr.strip()}")
+    env, run, holder = identity(cfg)
+
+    def fn(t2):
+        rec2 = need_row(t2, task)
+        s2 = t2.state(rec2)
+        if s2 in ("held", "done", "blocked"):
+            who = t2.get(rec2, "Holder") or "unknown"
+            raise Fail(3, f"{task} was taken meanwhile ({s2}, holder {who}); branch {branch} stays claimed and shows up as a leftover in `tracker next`")
+        t2.setmany(rec2, Status="Claimed", Holder=holder, Environment=env, Run=run, Branch=branch, Updated=stamp(), Blocker="")
+        return True, None
+    try:
+        mutate(cfg, f"tracker: claim {task} ({holder})", fn)
+    except Fail as e:
+        if e.code != 3:
+            log(f"branch {branch} is claimed but the row write failed; `tracker next` reconciles it")
+        raise
+    gd = git_dir(wt)
+    with open(os.path.join(gd, "tracker-claim"), "w") as fh:
+        json.dump({"project": cfg["PROJECT"], "conf": cfg["CONF"], "task": task, "holder": holder, "branch": branch, "claimed_at": stamp()}, fh)
+    print(f"CLAIMED {task} branch={branch} worktree={wt} holder={holder}")
+
+
+def holder_cmd(cfg, a, label, edit, allow_unheld=False, touch=True):
+    """A holder-only write: the claim is looked up and the row's Holder re-checked inside the compare-and-swap."""
+    pre = find_claim(cfg, a.task)[0]
+
+    def fn(t):
+        rec = need_row(t, a.task)
+        claim, gd = find_claim(cfg, a.task, t)
+        holder_guard(t, rec, a.task, claim, allow_unheld)
+        r = edit(t, rec)
+        if touch:
+            t.set(rec, "Updated", stamp())
+        return True, (r, claim, gd)
+    return mutate(cfg, f"tracker: {label} {a.task} ({pre['holder'] if pre else identity(cfg)[2]})", fn)[0]
+
+
+def cmd_beat(cfg, a):
+    if a.status and a.status.lower() not in ("building", "in review", "waiting"):
+        raise Fail(2, "--status must be Building, In review or Waiting")
+
+    def edit(t, rec):
+        if a.status:
+            t.set(rec, "Status", next(s for s in STATUSES if s.lower() == a.status.lower()))
+        if a.pr:
+            t.set(rec, "PR", f"#{a.pr.lstrip('#')}")
+        if a.next is not None:
+            t.set(rec, "Next step", a.next)
+    holder_cmd(cfg, a, "beat", edit)
+    print(f"beat {a.task}")
+
+
+def cmd_done(cfg, a):
+    holder_cmd(cfg, a, "done", lambda t, rec: t.setmany(rec, Status="Done", PR=f"#{a.pr.lstrip('#')}"))
+    print(f"done {a.task}")
+
+
+def run_notify(cfg, text):
+    cmd = shlex.split(cfg["NOTIFY_CMD"])
+    try:
+        r = subprocess.run(cmd, input=text, capture_output=True, text=True)
+    except OSError as e:
+        raise Fail(2, f"notify failed (the row is written): {e}")
+    # claude-notify always exits 0 and prints "sent" only when Telegram accepted the message
+    if r.returncode or (os.path.basename(cmd[0]) == "claude-notify" and "sent" not in r.stdout):
+        raise Fail(2, f"notify failed (the row is written): {(r.stderr or r.stdout).strip()[:200]}")
+
+
+def cmd_block(cfg, a):
+    blocker = f"needs {a.needs}: {a.text}"
+
+    def edit(t, rec):
+        dup = t.status(rec) == "Blocked" and t.get(rec, "Blocker") == blocker
+        t.setmany(rec, Status="Blocked", Blocker=blocker)
+        return dup, summary(t, rec)
+    (dup, s), claim, gd = holder_cmd(cfg, a, "block", edit, allow_unheld=True)
+    # a failed send leaves no marker in the claim file, so running the same command again sends it again
+    if dup and not (claim and claim.get("notified") != blocker):
+        print(f"already sent: {a.task} is Blocked with the same text")
+        return
+    run_notify(cfg, f"BLOCKED {cfg['PROJECT']} {s['task']} - {s['title']}\nneeds {a.needs}\nenvironment: {s['environment'] or '-'}  "
+                    f"run: {s['run'] or '-'}\nbranch: {s['branch'] or '-'}  PR: {s['pr'] or '-'}\naction: {a.text}")
+    if claim and gd:
+        with open(os.path.join(gd, "tracker-claim"), "w") as fh:
+            json.dump({**claim, "notified": blocker}, fh)
+    print(f"blocked {a.task}, notified")
+
+
+def cmd_release(cfg, a):
+    t0 = fetch(cfg)[1]
+    claim, gd = find_claim(cfg, a.task, t0)
+    rec0 = need_row(t0, a.task)
+    holder_guard(t0, rec0, a.task, claim)
+    r = subprocess.run([claim_branch_bin(), "--release", cfg["CODE_REPO"], t0.get(rec0, "Branch") or claim["branch"]], capture_output=True, text=True)
+    if r.returncode not in (0, 3):
+        raise Fail(2, f"claim-branch --release failed: {r.stderr.strip()}")
+    kept = r.returncode == 3  # the branch carries work or a PR: keep it, the row becomes a leftover (empty Holder and Updated)
+
+    def edit(t, rec):
+        if kept:
+            t.setmany(rec, Status="Building", Holder="", Environment="", Run="", Updated="")
+        else:
+            t.setmany(rec, Status="Not started", **{k.replace(" ", "_"): "" for k in AGENT_COLS})
+    holder_cmd(cfg, a, "release", edit, touch=False)
+    if gd and os.path.exists(os.path.join(gd, "tracker-claim")):
+        os.remove(os.path.join(gd, "tracker-claim"))
+    print(f"released {a.task}" + (": branch kept (it carries work), row is a leftover" if kept else ""))
+
+
+def cmd_check(args):
+    gd = git_dir(os.getcwd())
+    claim = gd and read_claim(gd)
+    if not claim or (args.task and claim.get("task") != args.task):
+        return 0
+    if not args.conf and os.path.isfile(claim.get("conf", "")):
+        args.conf = claim["conf"]
+    cfg = load_conf(args, claim.get("project", ""))
+    t = fetch(cfg)[1]
+    rec = t.find(claim["task"])
+    if rec is not None and t.get(rec, "Holder") == claim["holder"]:
+        return 0
+    g = (lambda c: t.get(rec, c)) if rec is not None else (lambda c: "")
+    print(f"tracker: taken over by {g('Holder') or 'nobody'} ({g('Environment')}, {g('Run')}) at {g('Updated')}: stop, do not push", file=sys.stderr)
+    return 5
+
+
+def main(argv=None):
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--project")
+    common.add_argument("--conf")
+    p = argparse.ArgumentParser(prog="tracker", description=__doc__.split("\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    add = lambda name: sub.add_parser(name, parents=[common])
+    add("sync")
+    add("migrate")
+    add("next").add_argument("--json", action="store_true")
+    c = add("claim")
+    c.add_argument("task"), c.add_argument("--slug"), c.add_argument("--worktree")
+    b = add("beat")
+    b.add_argument("task"), b.add_argument("--status"), b.add_argument("--pr"), b.add_argument("--next")
+    k = add("block")
+    k.add_argument("task"), k.add_argument("text"), k.add_argument("--needs", required=True, choices=["founder", "stakeholder"])
+    d = add("done")
+    d.add_argument("task"), d.add_argument("--pr", required=True)
+    add("release").add_argument("task")
+    add("check").add_argument("task", nargs="?")
+    try:
+        args = p.parse_args(argv)
+        if args.cmd == "check":
+            return cmd_check(args)
+        cfg = load_conf(args)
+        globals()["cmd_" + args.cmd](cfg, args)
+        return 0
+    except Fail as e:
+        log(str(e))
+        return e.code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

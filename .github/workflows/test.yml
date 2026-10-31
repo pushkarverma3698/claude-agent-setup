@@ -1,0 +1,24 @@
+# Runs the repo's own tests (no network, no tokens) on every push and pull request.
+name: test
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: git identity for tests that commit
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          git config --global init.defaultBranch main
+      - run: ./claude-remote-hooks/test-token-guard.sh
+      - run: python3 routines/ready/test_claim_branch.py
+      - run: python3 routines/ready/test_routine_fixes.py
+      - run: ./test_claude_notify.sh
+      - run: python3 routines/ready/test_tracker.py
+      - run: bash routines/tests/test-claude-bgd.sh

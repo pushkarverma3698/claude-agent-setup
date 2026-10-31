@@ -1,7 +1,33 @@
 #!/bin/bash
-# claude-bgd <main|alt|alt2>: the background-session daemon for one profile, in the foreground for systemd.
+# claude-bgd <main|alt|alt2>: the background-session daemon for one profile, kept alive by a wrapper loop.
+# Why a loop: when the launcher binary changes, `claude daemon run` starts a successor and exits; if that
+# supervisor is the unit's MainPID, systemd then kills the whole cgroup, adopted bg workers included.
+# Here the wrapper is the MainPID and only starts `daemon run` when no foreground daemon answers.
 # Written by setup-claude-routines on the founder's laptop; edit it there.
+# Test overrides: CLAUDE_BGD_PROFILE_ENV, CLAUDE_BGD_HOME, CLAUDE_BGD_TICK (seconds between checks).
 set -euo pipefail
-source /usr/local/bin/claude-profile-env "${1:-}"
-cd /home/claude-agent
-exec "$claude" daemon run
+source "${CLAUDE_BGD_PROFILE_ENV:-/usr/local/bin/claude-profile-env}" "${1:-}"
+cd "${CLAUDE_BGD_HOME:-/home/claude-agent}"
+tick=${CLAUDE_BGD_TICK:-20}
+
+child=
+on_term() { # systemctl stop: end the current `daemon run` (or sleep) and leave the loop
+  trap - TERM INT
+  if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi
+  exit 0
+}
+trap on_term TERM INT
+
+prev=none
+while :; do
+  st=$("$claude" daemon status 2>/dev/null || true)   # no pipe: grep -q + pipefail = SIGPIPE
+  if ! grep -q '^origin: *foreground' <<<"$st"; then
+    echo "claude-bgd@${1:-}: no foreground daemon, starting daemon run (previous run exit: $prev)"
+    "$claude" daemon run & child=$!   # background + wait, so the TERM trap runs at once
+    prev=0; wait "$child" || prev=$?
+    child=
+  fi
+  sleep "$tick" & child=$!
+  wait "$child" || true
+  child=
+done
