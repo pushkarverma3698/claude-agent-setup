@@ -1,6 +1,8 @@
 # claude-profile-env <main|alt|alt2>: sourced by claude-bgd, claude-routine and claude-handover, so all
 # three pick the same CLAUDE_CONFIG_DIR (the daemon socket is keyed on it). Written by
 # setup-claude-routines on the founder's laptop; edit it there.
+# DISABLE_AUTOUPDATER=1: the in-process autoupdater moved the launcher by itself (2026-10-31 06:34 UTC), which
+# makes a running daemon hand over to a successor. The nightly claude-remote-update runs `claude update` instead.
 case "${1:-}" in
   main) unset CLAUDE_CONFIG_DIR ;;
   alt|alt2) export CLAUDE_CONFIG_DIR=/home/claude-agent/.claude-$1 ;;
@@ -12,3 +14,4 @@ bgd_ready() { # the profile's claude-bgd daemon is up (origin foreground, not a 
   grep -q '^origin: *foreground' <<<"$st" || {
     echo "claude-bgd@$1 is not running (sudo systemctl start claude-bgd@$1); refusing to start a transient daemon" >&2; exit 69; }
 }
+export DISABLE_AUTOUPDATER=1
