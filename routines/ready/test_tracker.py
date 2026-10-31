@@ -143,7 +143,7 @@ class Sandbox(unittest.TestCase):
         self.env = {**os.environ, "PATH": self.bin + os.pathsep + os.environ["PATH"], "HOME": d, "FAKE_GH_DIR": self.fake,
                     "FAKE_ORIGIN": self.origin, "TRACKER_CLAIM_BRANCH": os.path.join(self.bin, "claim-branch"),
                     "TRACKER_RETRY_SCALE": "0", "TRACKER_CONF_DIR": os.path.join(d, "conf")}
-        for k in ("CLAUDE_CODE_HOST_SESSION_ID", "AGENT_OVERLAY_DIR", "TRACKER_PROJECT", "AGENT_SETUP_ENV"):
+        for k in ("CLAUDE_CODE_HOST_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "AGENT_OVERLAY_DIR", "TRACKER_PROJECT", "AGENT_SETUP_ENV"):
             self.env.pop(k, None)
         self.put([])
 
@@ -274,6 +274,27 @@ class Behaviour(Sandbox):
         gd = sh("git", "rev-parse", "--absolute-git-dir", cwd=old)
         self.assertEqual(json.loads(readf(os.path.join(gd, "tracker-claim")))["task"], "T-101")
         self.assertFalse(os.path.exists(os.path.join(self.clones["a"], ".claude", "worktrees", "feat-t101-thing")))
+
+    def test_04d_leftover_whose_derived_branch_is_a_merged_pr_head_gets_a_suffix(self):
+        # a "Part of T-101" PR merged from feat/t101-thing and the branch was kept: claiming the leftover must not reuse that name
+        self.branch_on_remote("feat/t101-thing", 30)
+        writef(os.path.join(self.fake, "prs.json"), json.dumps([{"number": 13, "headRefName": "feat/t101-thing", "mergedAt": "2026-10-30T11:00:00Z",
+                                                                  "body": "Part of T-101\nLeft: wire up the webhook\n"}]))
+        self.put([row("T-101", status="Building", Updated=ago(9), **{"Next step": "wire up the webhook"})])
+        self.assertIn("LEFTOVER T-101", self.tracker("next").stdout)
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("CLAIMED T-101 branch=feat/t101-thing-2 ", r.stdout)
+        self.assertIn("acme/app feat/t101-thing-2 main", self.log("cb.log"))
+        self.assertEqual(self.rows()["T-101"]["Branch"], "feat/t101-thing-2")
+
+    def test_04e_new_row_whose_derived_branch_is_taken_skips_to_the_next_free_suffix(self):
+        self.branch_on_remote("feat/t101-thing", 30)
+        self.branch_on_remote("feat/t101-thing-2", 30)
+        self.put([row("T-101")])
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.rows()["T-101"]["Branch"], "feat/t101-thing-3")
 
     def test_05_takeover_stops_old_holder(self):
         self.put([row("T-101", "Alpha")])
@@ -414,6 +435,18 @@ class Behaviour(Sandbox):
         r = self.tracker("check", cwd=self.clones["a"])
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
         self.assertEqual(self.log("gh.log"), "")
+
+    def test_14b_run_id_falls_back_to_claude_code_session_id(self):
+        self.put([row("T-101")])
+        e = {k: v for k, v in self.env.items() if k != "TRACKER_RUN"}
+        e.update(TRACKER_ENV="laptop", CLAUDE_CODE_SESSION_ID="abc")
+        conf = os.path.join(self.d, "conf", "proj-a.conf")
+        r = subprocess.run([sys.executable, TRACKER, "claim", "T-101", "--conf", conf], cwd=os.path.join(self.d, "cwd"), env=e,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        got = self.rows()["T-101"]
+        self.assertEqual(got["Run"], "abc")
+        self.assertRegex(got["Holder"], r"^laptop:abc:[0-9a-f]{6}$")
 
     def test_14_conf_found_by_origin_when_no_project_given(self):
         self.put([row("T-101")])

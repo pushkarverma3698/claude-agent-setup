@@ -100,7 +100,8 @@ def load_conf(args, project_hint=""):
 
 def identity(cfg):
     env = os.environ.get("TRACKER_ENV") or cfg.get("TRACKER_ENV") or socket.gethostname().split(".")[0]
-    run = (os.environ.get("TRACKER_RUN") or os.environ.get("CLAUDE_CODE_HOST_SESSION_ID") or cfg.get("TRACKER_RUN")
+    run = (os.environ.get("TRACKER_RUN") or os.environ.get("CLAUDE_CODE_HOST_SESSION_ID")
+           or os.environ.get("CLAUDE_CODE_SESSION_ID") or cfg.get("TRACKER_RUN")
            or "manual-" + now().strftime("%Y%m%d%H%M"))
     return env, run, f"{env}:{run}:{secrets.token_hex(3)}"
 
@@ -546,7 +547,12 @@ def cmd_claim(cfg, a):
         hours = str(math.ceil(cfg["lease"].total_seconds() / 3600))
         r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, env={**os.environ, "CLAIM_HOURS": hours})
     else:
-        branch = cfg["BRANCH_FMT"].format(num=task_num(task), slug=a.slug or slugify(g(cfg["TITLE_COL"])))
+        branch = base = cfg["BRANCH_FMT"].format(num=task_num(task), slug=a.slug or slugify(g(cfg["TITLE_COL"])))
+        # a kept branch of an earlier merged PR (or any live one) owns the plain name: claim-branch would refuse it as held
+        taken = set(remote_branches(cfg)) | {p["headRefName"] for p in merged_prs(cfg)}
+        n = 2
+        while branch in taken:
+            branch, n = f"{base}-{n}", n + 1
         r = subprocess.run([cb, repo, branch, cfg["WORK_BASE"]], capture_output=True, text=True)
     sys.stderr.write(r.stderr)
     if r.returncode:
