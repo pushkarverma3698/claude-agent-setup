@@ -15,7 +15,7 @@ no holder, is a LEFTOVER and must be taken (claim --resume) before any new task.
 in the worktree, which `check` (push hooks) reads to stop a session whose row someone else took over.
 Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder.
 """
-import argparse, base64, csv, datetime as dt, io, json, os, random, re, secrets, shlex, shutil, socket, subprocess, sys, time
+import argparse, base64, csv, datetime as dt, io, json, math, os, random, re, secrets, shlex, shutil, socket, subprocess, sys, time
 import urllib.parse
 
 AGENT_COLS = ["Holder", "Environment", "Run", "Branch", "PR", "Blocker", "Next step", "Updated"]
@@ -541,7 +541,10 @@ def cmd_claim(cfg, a):
     else:
         branch = ""
     if branch:
-        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True)
+        # the row lease decides who may take a leftover: claim-branch's own CLAIM_HOURS (12) must not outlive LEASE_HOURS (6),
+        # or `next` offers a leftover that `claim` then refuses. LIVE_HOURS stays: a recent real push means someone is live.
+        hours = str(math.ceil(cfg["lease"].total_seconds() / 3600))
+        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, env={**os.environ, "CLAIM_HOURS": hours})
     else:
         branch = cfg["BRANCH_FMT"].format(num=task_num(task), slug=a.slug or slugify(g(cfg["TITLE_COL"])))
         r = subprocess.run([cb, repo, branch, cfg["WORK_BASE"]], capture_output=True, text=True)
@@ -553,7 +556,8 @@ def cmd_claim(cfg, a):
     f = gitc("fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
     if f.returncode:
         raise Fail(2, f"git fetch {branch} failed: {f.stderr.strip()}")
-    wt = os.path.abspath(a.worktree or os.path.join(cfg["WORKTREE_ROOT"], branch.replace("/", "-")))
+    # a run that died earlier may have left the branch checked out at some other path: reuse it unless --worktree says otherwise
+    wt = os.path.abspath(a.worktree or worktree_of(rd, branch) or os.path.join(cfg["WORKTREE_ROOT"], branch.replace("/", "-")))
     if worktree_of(rd, branch) != wt:
         w = gitc("worktree", "add", "--track", "-B", branch, wt, f"origin/{branch}")
         if w.returncode:
@@ -639,7 +643,7 @@ def cmd_block(cfg, a):
         print(f"already sent: {a.task} is Blocked with the same text")
         return
     run_notify(cfg, f"BLOCKED {cfg['PROJECT']} {s['task']} - {s['title']}\nneeds {a.needs}\nenvironment: {s['environment'] or '-'}  "
-                    f"run: {s['run'] or '-'}\nbranch: {s['branch'] or '-'}  PR: {s['pr'] or '-'}\nblocker: {a.text}\naction: {a.text}")
+                    f"run: {s['run'] or '-'}\nbranch: {s['branch'] or '-'}  PR: {s['pr'] or '-'}\naction: {a.text}")
     if claim and gd:
         with open(os.path.join(gd, "tracker-claim"), "w") as fh:
             json.dump({**claim, "notified": blocker}, fh)

@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -59,7 +60,9 @@ echo "$*" >> "$FAKE_GH_DIR/cb.log"
 [ -n "${FAKE_CB_EXIT:-}" ] && { echo "claim-branch: held" >&2; exit "$FAKE_CB_EXIT"; }
 case "$1" in
   --release) [ -f "$FAKE_GH_DIR/keep" ] && exit 3; git -C "$FAKE_ORIGIN" branch -qD "$3" 2>/dev/null; echo released ;;
-  --resume) echo claimsha ;;
+  --resume) echo "CLAIM_HOURS=${CLAIM_HOURS:-12}" >> "$FAKE_GH_DIR/cb.log"   # claim-branch refuses a claim commit younger than CLAIM_HOURS
+            [ -f "$FAKE_GH_DIR/tip_age" ] && [ "$(cat "$FAKE_GH_DIR/tip_age")" -lt "${CLAIM_HOURS:-12}" ] && { echo "claim-branch: claimed $(cat "$FAKE_GH_DIR/tip_age")h ago, someone holds the task" >&2; exit 3; }
+            echo claimsha ;;
   *) git -C "$FAKE_ORIGIN" branch "$2" main && echo claimsha ;;
 esac
 '''
@@ -246,6 +249,32 @@ class Behaviour(Sandbox):
         self.assertEqual((claim["task"], claim["holder"], claim["project"]), ("T-101", got["Holder"], "proj-a"))
         self.assertEqual(self.tracker("next", who="B").stdout.splitlines()[0], "NEXT NEW T-102")
 
+    def test_04b_leftover_between_lease_and_claim_hours_resumes(self):
+        # 2026-10: a 7h-old leftover was offered by `next`, but claim-branch's 12h CLAIM_HOURS refused the resume
+        self.branch_on_remote("feat/t101-thing", 7)
+        writef(os.path.join(self.fake, "tip_age"), "7")  # the branch tip is a claim commit 7h old
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(7)), row("T-102", "Next one")])
+        self.assertEqual(self.tracker("next").stdout.splitlines()[0], "NEXT LEFTOVER T-101")
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("CLAIM_HOURS=6", self.log("cb.log"))
+        writef(os.path.join(self.fake, "tip_age"), "3")  # a claim commit younger than the lease still refuses
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(7))])
+        self.assertEqual(self.tracker("claim", "T-101").returncode, 3)
+
+    def test_04c_leftover_reuses_worktree_at_another_path(self):
+        self.branch_on_remote("feat/t101-thing", 9)
+        old = os.path.join(self.d, "elsewhere", "old-run")
+        sh("git", "fetch", "-q", "origin", cwd=self.clones["a"])
+        sh("git", "worktree", "add", "--track", "-B", "feat/t101-thing", old, "origin/feat/t101-thing", cwd=self.clones["a"])
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(9))])
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(os.path.realpath(re.search(r"worktree=(\S+)", r.stdout).group(1)), os.path.realpath(old))
+        gd = sh("git", "rev-parse", "--absolute-git-dir", cwd=old)
+        self.assertEqual(json.loads(readf(os.path.join(gd, "tracker-claim")))["task"], "T-101")
+        self.assertFalse(os.path.exists(os.path.join(self.clones["a"], ".claude", "worktrees", "feat-t101-thing")))
+
     def test_05_takeover_stops_old_holder(self):
         self.put([row("T-101", "Alpha")])
         r = self.tracker("claim", "T-101")
@@ -332,6 +361,7 @@ class Behaviour(Sandbox):
         msg = self.log("notify.log")
         for needle in ("proj-a", "T-101", "Alpha", "laptop", "runA", "feat/t101-alpha", "need the DNS login; add it to the vault"):
             self.assertIn(needle, msg)
+        self.assertEqual(msg.count("need the DNS login; add it to the vault"), 1)  # the text is printed once, not as blocker and action
         self.assertEqual(self.rows()["T-101"]["Blocker"], "needs founder: need the DNS login; add it to the vault")
         again = self.tracker("block", "T-101", "need the DNS login; add it to the vault", "--needs", "founder", cwd=wt)
         self.assertEqual(again.returncode, 0)
