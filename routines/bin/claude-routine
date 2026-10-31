@@ -97,6 +97,12 @@ live_run() {
   local newest; newest=$(newest_record "$2")
   [ -n "$newest" ] && [ $(( $(date +%s) - newest )) -lt 2700 ]
 }
+# slot_busy <name> <profile> <id> <state.json> <transcript>: a timer slot (several per day: SCHEDULE="03:04 15:00") that fires
+# while this routine's lead is still working skips. Prints the one line saying which run is live and returns 0; 1 = not live.
+slot_busy() {
+  live_run "$4" "$5" || return 1
+  echo "claude-routine: slot skipped, $1 run $3 ($2) is still working (last record $(( ($(date +%s) - $(newest_record "$5")) / 60 )) min ago); it is left alone"
+}
 resume_one() (
   st="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$2/state.json"
   [ -f "$st" ] || exit 0
@@ -201,16 +207,13 @@ wt_remove() { local c; c=$(git -C "$1" rev-parse --path-format=absolute --git-co
 
 # One open run per routine: stop and remove the previous ones, under every listed account.
 IFS=, read -ra plist <<<"$profiles"
-# ... unless one is still working (a record under 45 min old): a second start never kills a live run.
+# ... unless one is still working (a record under 45 min old): a second start never kills a live run, so the slot skips and exits 0.
 for p in "${plist[@]}"; do
   source /usr/local/bin/claude-profile-env "$p"
   for id in $(cd "$dir" && "$claude" agents --json --all 2>/dev/null | jq -r --arg p "routine: $name " \
                '.[] | select(.kind == "background" and ((.name // "") | startswith($p))) | .id'); do
     st="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id/state.json"; f=$([ -f "$st" ] && jq -r '.linkScanPath // empty' "$st" || true)
-    if [ -f "$st" ] && [ -f "$f" ] && live_run "$st" "$f"; then
-      echo "claude-routine: $name not started, run $id ($p) is still working (last record $(( ($(date +%s) - $(newest_record "$f")) / 60 )) min ago); it is left alone"
-      exit 0
-    fi
+    if [ -f "$st" ] && [ -f "$f" ] && slot_busy "$name" "$p" "$id" "$st" "$f"; then exit 0; fi
   done
 done
 for p in "${plist[@]}"; do

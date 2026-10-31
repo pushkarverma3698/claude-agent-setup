@@ -1,32 +1,40 @@
 #!/usr/bin/env bash
 #
-# routine-new — give a GitHub repo the daily VPS routine (2026-10-27):
-# a scheduled Claude run picks up to 5 agent:ready issues, builds, reviews and merges verified PRs into the
-# repo's integration branch, and a code-only PROD-READY verdict for that day's PRs goes to Telegram.
+# routine-new — give a GitHub repo the scheduled VPS routine (2026-10-27, rebuilt on the per-project config 2026-10-31):
+# a scheduled Claude run works the project's task tracker (a CSV in its own repo, routines/bin/tracker), builds,
+# reviews and merges verified PRs into the repo's integration branch, and a code-only PROD-READY verdict goes to Telegram.
+# No GitHub labels: task state lives in the tracker.
 #
 #   routine-new <owner/repo> <integration-branch> <schedule> [options]
 #   routine-new --remove <name>
 #
-#   <schedule>          HH:MM = daily at that time in NOTIFY_TZ (default UTC); anything else is used as a systemd OnCalendar
-#   --name <name>       routine name and verdict group (default: <repo>-daily)
+#   <schedule>          space-separated HH:MM times, daily in --tz ("03:04 15:00" = two runs a day, one timer);
+#                       anything with a * or - is used as one systemd OnCalendar string (routines/bin/routine-schedule)
+#   --name <name>       routine name, project name and verdict group (default: <repo>-daily)
+#   --tracker-repo <o/r>  repo holding the tracker CSV (default: <owner/repo>-tracker; created PRIVATE when missing)
+#   --tracker-path <p>  the CSV inside it (default: backlog.csv; seeded with a header and one example row when missing)
+#   --tz <zone>        zone of the HH:MM times, written as SCHEDULE_TZ (default: $NOTIFY_TZ, else UTC)
 #   --profile <list>    accounts in order, the first with usage left runs it (default: alt,alt2,main)
 #   --model <model>     lead model (default: opus; builders are Sonnet, set in the job file)
-#   --verdict-at <T>    verdict time, HH:MM:SS UTC (default: 6 h after an HH:MM schedule; required otherwise)
+#   --verdict-at <T>    verdict time, HH:MM:SS UTC (default: 6 h after the last HH:MM time; required otherwise)
 #   --boot-check <name> the CI check that boots the app: the verdict and branch protection require it
 #   --no-deploy         write everything, skip setup-claude-routines
 #
 # Steps, each skipping what already exists (it never overwrites a routine):
-#   1. gh here and claude-agent's gh on the VPS can write to the repo
-#   2. the integration branch exists (created from the default branch's head if not)
-#   3. labels agent:ready/working/review/approved/blocked/needs-brief
+#   1. gh here and claude-agent's gh on the VPS can write to the code repo
+#   2. the code repo has a first commit (an empty repo gets a README) and the integration branch exists (created
+#      from the default branch's head if not)
+#   3. the tracker repo exists (created private if not), holds the CSV (seeded if not), and claude-agent can write to it
 #   4. branch protection on the integration branch when it has none: PRs required (0 approvals; the agent merges
 #      as the same account), no force-push, no deletion, plus the boot check when given
 #   5. clone in /home/claude-agent/work/<repo> on the VPS
-#   6. claude-routines/<name>.{conf,md} here, /home/claude-agent/agent-jobs/<name>.md on the VPS from
-#      routine-job-template.md (keeps definition-of-done.md and the routine/review status)
-#   7. setup-claude-routines (timers, verdict group), then the timers and a dry-run verdict for the group
+#   6. `tracker migrate`: the agent columns are added to the CSV (checked against a draft conf before anything is written)
+#   7. claude-routines/<name>.{conf,md} here (routine keys + tracker keys in the one conf), /home/claude-agent/agent-jobs/<name>.md
+#      on the VPS from routine-job-template.md (keeps definition-of-done.md and the routine/review status)
+#   8. setup-claude-routines (timers, verdict group), then the timers, a dry-run verdict for the group and
+#      `tracker next` as the last self-check
 # --remove deletes the two definition files, re-runs setup-claude-routines (it disables and removes both
-# timers) and renames the VPS job file to <name>.md.removed-<date>. The clone, labels and protection stay.
+# timers) and renames the VPS job file to <name>.md.removed-<date>. The clone and protection stay.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -35,23 +43,20 @@ need_host
 DEFS="${ROUTINE_CONF_DIR:-${AGENT_OVERLAY_DIR:+$AGENT_OVERLAY_DIR/claude-routines}}"
 [ -d "$DEFS" ] || { echo "routine-new: set AGENT_OVERLAY_DIR or ROUTINE_CONF_DIR" >&2; exit 64; }
 TEMPLATE="$HERE/routine-job-template.md"
+SCHEDULER="$HERE/routines/bin/routine-schedule"
+TRACKER="${TRACKER_BIN:-$HERE/routines/bin/tracker}"
 HOST=$AGENT_RULES_HOST
 JOBS=/home/claude-agent/agent-jobs
-LABELS="agent:ready|0e8a16|picked by the daily routine
-agent:working|fbca04|a routine builder is on it
-agent:review|1d76db|PR open, waiting for the routine's review
-agent:approved|5319e7|reviewed, verified and merged by the routine
-agent:blocked|d93f0b|the routine could not finish it; see the PR or issue comment
-agent:needs-brief|b60205|needs a founder answer before the routine builds it"
 
 die() { echo "routine-new: $*" >&2; exit 1; }
-usage() { sed -n '7,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
+usage() { sed -n '8,21p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
 vps() { ssh -o BatchMode=yes "$HOST" "$@"; }
 # vps_agent <script> [args]: runs bash as claude-agent on the VPS with the args quoted through ssh
 vps_agent() { local s=$1; shift; vps "sudo -n -u claude-agent -H bash -s -- $(printf '%q ' "$@")" <<<"$s"; }
 show_state() { # show_state <name>: the routine's timers and its group's dry-run verdict
   echo "== timers"
   vps "systemctl list-timers --all --no-pager | grep -E 'NEXT|claude-routine@$1\.timer|routine-verdict@$1\.timer' || echo '  (no timer for $1)'"
+  vps "systemctl show -p TimersCalendar claude-routine@$1.timer 2>/dev/null | sed 's/ ; /\n    /g; s/^/  /' || true"  # one line per time, each with its next run
   echo "== DRY_RUN=1 routine-verdict $1"
   vps "sudo -n -u claude-agent -H env DRY_RUN=1 /usr/local/bin/routine-verdict $1" || echo "  (routine-verdict exit $?)"
 }
@@ -71,10 +76,13 @@ fi
 # ---- arguments --------------------------------------------------------------------------------------
 [ $# -ge 3 ] || usage
 repo=$1 base=$2 sched=$3; shift 3
-name="" profile=alt,alt2,main model=opus vat="" boot="" deploy=1
+name="" profile=alt,alt2,main model=opus vat="" boot="" deploy=1 trepo="" tpath=backlog.csv tz=""
 while [ $# -gt 0 ]; do
   case $1 in
     --name) name=${2:?}; shift 2 ;;
+    --tracker-repo) trepo=${2:?}; shift 2 ;;
+    --tracker-path) tpath=${2:?}; shift 2 ;;
+    --tz) tz=${2:?}; shift 2 ;;
     --profile) profile=${2:?}; shift 2 ;;
     --model) model=${2:?}; shift 2 ;;
     --verdict-at) vat=${2:?}; shift 2 ;;
@@ -89,19 +97,26 @@ dir=${repo#*/}
 slug=$(printf %s "$dir" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | sed 's/--*/-/g; s/^-//; s/-$//')
 [ -n "$name" ] || name="$slug-daily"
 [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ && "$name" != all ]] || die "--name must be a-z, 0-9, - (not all)"
+[ -n "$trepo" ] || trepo="$repo-tracker"
+[[ "$trepo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "--tracker-repo must be owner/repo, got '$trepo'"
+[ "$trepo" != "$repo" ] || die "the tracker repo must be a different repo from the code repo (a protected branch refuses the tool's writes)"
+[[ "$tpath" =~ ^[A-Za-z0-9_./-]+$ && "$tpath" != /* ]] || die "bad --tracker-path '$tpath'"
 [[ "$profile" =~ ^(main|alt|alt2)(,(main|alt|alt2))*$ ]] || die "--profile must be main, alt, alt2 or a comma list"
 [[ "$model" =~ ^[a-z0-9.-]+$ ]] || die "bad --model"
-if [[ "$sched" =~ ^([01][0-9]|2[0-3]):([0-5][0-9])$ ]]; then
-  h=${BASH_REMATCH[1]} m=${BASH_REMATCH[2]}
-  tz=${NOTIFY_TZ:-UTC}
-  oncal="*-*-* $h:$m:00 $tz"
-  if [ -z "$vat" ]; then # 6 h after the local time, written in UTC: subtract the zone's offset
-    z=$(TZ=$tz date +%z); off=$(( 10#${z:1:2} * 60 + 10#${z:3:2} )); [ "${z:0:1}" = - ] && off=$(( -off ))
-    t=$(( (10#$h * 60 + 10#$m + 360 - off + 2880) % 1440 )); vat=$(printf '%02d:%02d:00' $((t / 60)) $((t % 60)))
-  fi
-else
-  oncal=$sched
+[ -f "$SCHEDULER" ] || die "missing $SCHEDULER"
+[ -x "$TRACKER" ] || die "missing $TRACKER (routines/bin/tracker; merge the tracker branch first)"
+if [[ "$sched" == *'*'* || "$sched" == *-* ]]; then # a systemd calendar string, one OnCalendar line (the pre-2026-10-31 form)
+  [ -z "$tz" ] || die "--tz goes with HH:MM times; write the zone inside the calendar string"
   [ -n "$vat" ] || die "--verdict-at HH:MM:SS (UTC) is required with an OnCalendar schedule"
+  timeform=0
+else
+  timeform=1; tz=${tz:-${NOTIFY_TZ:-UTC}}
+fi
+oncal=$("$SCHEDULER" "$sched" "$tz") || die "bad schedule '$sched'"
+if [ $timeform = 1 ] && [ -z "$vat" ]; then # 6 h after the last time of the day, written in UTC: subtract the zone's offset
+  last=$(tr ' ' '\n' <<<"$sched" | grep . | sort | tail -1); h=${last%:*} m=${last#*:}
+  z=$(TZ=$tz date +%z); off=$(( 10#${z:1:2} * 60 + 10#${z:3:2} )); [ "${z:0:1}" = - ] && off=$(( -off ))
+  t=$(( (10#$h * 60 + 10#$m + 360 - off + 2880) % 1440 )); vat=$(printf '%02d:%02d:00' $((t / 60)) $((t % 60)))
 fi
 [[ "$vat" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$ ]] || die "--verdict-at must be HH:MM:SS (UTC)"
 [ -f "$TEMPLATE" ] || die "missing $TEMPLATE"
@@ -111,20 +126,30 @@ for c in "$DEFS"/*.conf; do
   g=$(bash -c 'source "$1"; printf %s "${VERDICT:-}"' _ "$c")
   [ "$g" != "$name" ] || die "verdict group $name is already used by $(basename "$c")"
 done
-vps "systemd-analyze calendar '$oncal' >/dev/null" || die "systemd does not accept the schedule '$oncal'"
+while IFS= read -r l; do
+  vps "systemd-analyze calendar '$l' >/dev/null" </dev/null || die "systemd on the VPS does not accept the schedule line '$l'"
+done <<<"$oncal"
 vps "sudo -n test ! -e $JOBS/$name.md" || die "$JOBS/$name.md already exists on the VPS"
-echo "routine $name: $repo, integration branch $base, runs $oncal, verdict $vat UTC, accounts $profile"
+echo "routine $name: $repo, integration branch $base, tracker $trepo/$tpath, runs: $(tr '\n' ';' <<<"$oncal" | sed 's/;$//; s/;/; /g'), verdict $vat UTC, accounts $profile"
 
 # ---- 1. access ----------------------------------------------------------------------------------------
+write_ok() { case $1 in ADMIN|MAINTAIN|WRITE) return 0;; *) return 1;; esac; }
 perm=$(gh repo view "$repo" --json viewerPermission -q .viewerPermission) || die "gh here cannot read $repo"
-case $perm in ADMIN|MAINTAIN|WRITE) ;; *) die "gh here has $perm on $repo; it needs write";; esac
+write_ok "$perm" || die "gh here has $perm on $repo; it needs write"
 vperm=$(vps_agent 'gh repo view "$1" --json viewerPermission -q .viewerPermission' "$repo") || die "claude-agent's gh on the VPS cannot read $repo"
-case $vperm in ADMIN|MAINTAIN|WRITE) ;; *) die "claude-agent on the VPS has $vperm on $repo; it needs write";; esac
+write_ok "$vperm" || die "claude-agent on the VPS has $vperm on $repo; it needs write"
 echo "1. access: here $perm, VPS claude-agent $vperm"
 
-# ---- 2. integration branch ----------------------------------------------------------------------------
-prod=$(gh repo view "$repo" --json defaultBranchRef -q .defaultBranchRef.name)
-[ -n "$prod" ] || die "$repo has no default branch (empty repo?): push a first commit"
+# ---- 2. first commit and integration branch --------------------------------------------------------------
+# A repo with no commit has a default_branch name but no branch behind it: the contents API creates the first commit.
+prod=$(gh api "repos/$repo" -q .default_branch)
+[ -n "$prod" ] || die "GitHub gave no default branch name for $repo"
+if ! gh api "repos/$repo/branches/$prod" --silent 2>/dev/null; then
+  [ "$(gh api "repos/$repo/branches" -q length)" = 0 ] || die "$repo has branches but no $prod: fix its default branch"
+  gh api -X PUT "repos/$repo/contents/README.md" -f message="chore: first commit (routine-new)" \
+    -f content="$(printf '# %s\n' "$dir" | base64 | tr -d '\n')" --silent || die "could not create the first commit in $repo"
+  echo "2. $repo was empty: created $prod with a README"
+fi
 if gh api "repos/$repo/branches/$base" --silent 2>/dev/null; then
   echo "2. branch $base exists (default branch: $prod)"
 else
@@ -134,14 +159,27 @@ else
 fi
 [ "$base" != "$prod" ] || echo "   note: the integration branch is the default branch, so merges go straight to $prod"
 
-# ---- 3. labels ------------------------------------------------------------------------------------------
-have=$(gh label list -R "$repo" --limit 200 --json name -q '.[].name')
-made=""
-while IFS='|' read -r l col desc; do
-  grep -qxF "$l" <<<"$have" && continue
-  gh label create "$l" -R "$repo" --color "$col" --description "$desc" >/dev/null; made="$made $l"
-done <<<"$LABELS"
-if [ -n "$made" ]; then echo "3. labels: created$made"; else echo "3. labels: all present"; fi
+# ---- 3. tracker repo ---------------------------------------------------------------------------------------
+# Private, and unprotected: the tool writes the CSV with the contents API, which a protected branch refuses.
+if gh repo view "$trepo" --json name >/dev/null 2>&1; then
+  echo "3. tracker repo $trepo exists"
+else
+  gh repo create "$trepo" --private --description "Task tracker for $repo (routine-new)" >/dev/null || die "could not create $trepo"
+  echo "3. created private tracker repo $trepo"
+fi
+tperm=$(gh repo view "$trepo" --json viewerPermission -q .viewerPermission)
+write_ok "$tperm" || die "gh here has $tperm on $trepo; it needs write"
+vtperm=$(vps_agent 'gh repo view "$1" --json viewerPermission -q .viewerPermission' "$trepo") || die "claude-agent's gh on the VPS cannot read $trepo"
+write_ok "$vtperm" || die "claude-agent on the VPS has $vtperm on $trepo; it needs write"
+if gh api "repos/$trepo/contents/$tpath" -q .sha >/dev/null 2>&1; then
+  echo "   $tpath is in $trepo"
+else
+  gh api -X PUT "repos/$trepo/contents/$tpath" -f message="chore: seed the task tracker (routine-new)" \
+    -f content="$(printf 'Task ID,Title,Status,Depends on,Milestone\nT-1,Replace this example row with your first task,Not started,,M1\n' | base64 | tr -d '\n')" \
+    --silent || die "could not seed $tpath in $trepo"
+  echo "   seeded $tpath with a header row and the example row T-1"
+fi
+tbranch=$(gh api "repos/$trepo" -q .default_branch)
 
 # ---- 4. branch protection -------------------------------------------------------------------------------
 if out=$(gh api "repos/$repo/branches/$base/protection" 2>&1); then
@@ -179,8 +217,41 @@ else
   git clone -q "https://github.com/$1.git" "$d" && echo "5. cloned $1 to $d"
 fi' "$repo" "$dir" || die "clone step failed"
 
-# ---- 6. definition files and job file -------------------------------------------------------------------
+# ---- 6. the conf, and the tracker's agent columns -----------------------------------------------------------
 if [ -n "$boot" ]; then boot_line="\`$boot\` (the verdict requires it)"; else boot_line="none yet: do Step 0"; fi
+conf=$(
+  echo "# Routine for $repo, written by routine-new on $(date +%F). Job steps: $JOBS/$name.md."
+  echo "# One file per project: the routine keys below are read by claude-routine, the tracker keys by routines/bin/tracker."
+  echo "PROFILE=$profile"
+  echo "REPO=$dir                   # ~claude-agent/work/<REPO>"
+  echo "BASE=$base                   # the lead worktree ~/work/wt/<name> is cut from origin/<BASE>"
+  echo "SCHEDULE=\"$sched\"   # HH:MM times, one timer slot each; a slot that finds the lead still working skips"
+  [ $timeform = 0 ] || echo "SCHEDULE_TZ=$tz               # zone of those times (default UTC)"
+  echo "ARGS=(--model $model --effort medium)"
+  echo "# Code-only verdict after the run (routine-verdict@<VERDICT>.timer)."
+  echo "VERDICT=$name"
+  echo "VERDICT_AT=$vat              # UTC, daily"
+  echo "VERDICT_REPOS=(\"$slug|$repo|$base\")   # tag|owner/repo|bases"
+  [ -z "$boot" ] || echo "VERDICT_CHECKS=(\"$repo|$boot\")   # repo|check that must be success (boots the app)"
+  echo "# Tracker: the CSV that says who works on what (examples/claude-routines/nightly.conf lists the optional keys)."
+  echo "TRACKER_REPO=$trepo"
+  echo "TRACKER_PATH=$tpath"
+  echo "TRACKER_BRANCH=$tbranch"
+  echo "CODE_REPO=$repo"
+  echo "WORK_BASE=$base                   # new task branches are cut from it"
+  echo "# Guard rules (routine-policy documents the fields): PRs into $base, feat/t<N>-* claimed first (BRANCH_FMT's default)."
+  if "$HERE/routine-policy" | jq -e --arg r "$repo" '.repos[$r]' >/dev/null; then
+    echo "# GUARD_REPOS: $repo already has guard rules in another conf (one entry per repo)."
+  else
+    echo "GUARD_REPOS=('$repo|bases=$base|branch=^feat/t(\\d+)-')"
+  fi
+)
+draft=$(mktemp -d)/$name.conf; trap 'rm -rf "$(dirname "$draft")"' EXIT
+printf '%s\n' "$conf" >"$draft"
+mout=$("$TRACKER" migrate --project "$name" --conf "$draft" 2>&1) || die "tracker migrate failed (nothing written to ${DEFS/#$HOME/~} or the VPS): $mout"
+echo "6. tracker migrate: ${mout:-agent columns present}"
+
+# ---- 7. definition files and job file -------------------------------------------------------------------
 job=$(cat "$TEMPLATE")
 job=${job//\{\{NAME\}\}/$name}; job=${job//\{\{REPO\}\}/$repo}; job=${job//\{\{DIR\}\}/$dir}
 job=${job//\{\{BASE\}\}/$base}; job=${job//\{\{PROD\}\}/$prod}; job=${job//\{\{BOOT_LINE\}\}/$boot_line}
@@ -188,31 +259,19 @@ job=${job//\{\{DATE\}\}/$(date +%F)}
 ! grep -q '{{' <<<"$job" || die "template has an unfilled placeholder: $(grep -o '{{[A-Z_]*}}' <<<"$job" | head -1)"
 vps "sudo -n -u claude-agent -H bash -c 'pgrep -u claude-agent -af \"[r]outine: $name( |\$)\" && exit 3; test ! -e $JOBS/$name.md || exit 4; umask 022; cat >$JOBS/$name.md'" <<<"$job" \
   || die "did not write $JOBS/$name.md (exit $?: 3 = a run is live, 4 = it exists)"
-echo "6. wrote $HOST:$JOBS/$name.md"
-{
-  echo "# Daily routine for $repo, written by routine-new on $(date +%F). Job steps: $JOBS/$name.md."
-  echo "PROFILE=$profile"
-  echo "REPO=$dir                   # ~claude-agent/work/<REPO>"
-  echo "BASE=$base                   # the lead worktree ~/work/wt/<name> is cut from origin/<BASE>"
-  echo "SCHEDULE=\"$oncal\"   # systemd OnCalendar"
-  echo "ARGS=(--model $model --effort medium)"
-  echo "# Code-only verdict after the run (routine-verdict@<VERDICT>.timer)."
-  echo "VERDICT=$name"
-  echo "VERDICT_AT=$vat              # UTC, daily"
-  echo "VERDICT_REPOS=(\"$slug|$repo|$base\")   # tag|owner/repo|bases"
-  [ -z "$boot" ] || echo "VERDICT_CHECKS=(\"$repo|$boot\")   # repo|check that must be success (boots the app)"
-  echo "# Guard rules (ai-tools/routine-policy documents the fields): PRs into $base, task/issue-<N>-* claimed first."
-  if "$HERE/routine-policy" | jq -e --arg r "$repo" '.repos[$r]' >/dev/null; then
-    echo "# GUARD_REPOS: $repo already has guard rules in another conf (one entry per repo)."
-  else
-    echo "GUARD_REPOS=('$repo|bases=$base|branch=^task/issue-(\\d+)-')"
-  fi
-} >"$DEFS/$name.conf"
-echo "Daily run for $repo. Read $JOBS/$name.md in full and follow it exactly, start to finish. Work autonomously; nobody is awake." >"$DEFS/$name.md"
+echo "7. wrote $HOST:$JOBS/$name.md"
+cp "$draft" "$DEFS/$name.conf"
+echo "Routine run for $repo. Read $JOBS/$name.md in full and follow it exactly, start to finish. Work autonomously; nobody is awake." >"$DEFS/$name.md"
 echo "   wrote ${DEFS/#$HOME/~}/$name.{conf,md}"
 
-# ---- 7. deploy ------------------------------------------------------------------------------------------
-if [ $deploy = 0 ]; then echo "7. --no-deploy: run setup-claude-routines to arm it"; exit 0; fi
-"$HERE/setup-claude-routines"
-show_state "$name"
-echo "Done. First run: $oncal. Queue work by labelling issues agent:ready in $repo."
+# ---- 8. deploy ------------------------------------------------------------------------------------------
+if [ $deploy = 0 ]; then echo "8. --no-deploy: run setup-claude-routines to arm it"
+else
+  "$HERE/setup-claude-routines"
+  show_state "$name"
+fi
+echo "== tracker next (self-check, conf ${DEFS/#$HOME/~}/$name.conf)"
+nout=$("$TRACKER" next --project "$name" --conf "$DEFS/$name.conf" 2>&1) || die "tracker next failed: $nout"
+printf '%s\n' "$nout" | sed 's/^/  /'
+grep -q '^NEXT ' <<<"$nout" || die "tracker next printed no NEXT line"
+echo "Done. Runs: $(tr '\n' ';' <<<"$oncal" | sed 's/;$//; s/;/; /g'). Queue work by adding rows to $trepo/$tpath (Task ID, Title, Status, Depends on, Milestone)."
