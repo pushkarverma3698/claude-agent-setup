@@ -44,13 +44,13 @@
 #     routine-verdict.service           routine-verdict all (manual: sudo systemctl start routine-verdict)
 #     routine-verdict@<group>.timer     one per VERDICT=<group> in the confs, daily at VERDICT_AT UTC
 #                                       (e.g. 17:30, a few hours after the routine's run)
-#     claude-bgd@<profile>.service      `claude daemon run` in claude.slice: every --bg session
-#                                       (routines, handovers) lives here. Without it --bg would start a
-#                                       transient daemon inside the timer's unit, killed when it ends.
+#     claude-bgd@<profile>.service      wrapper loop around `claude daemon run` in claude.slice: every --bg
+#                                       session (routines, handovers) lives here. Without it --bg would start a
+#                                       transient daemon inside the timer's unit, killed when it ends. The
+#                                       wrapper, not the daemon, is the MainPID, so the daemon handing over to
+#                                       a successor after a launcher update no longer kills the workers.
 #     claude-routine@<name>.timer       OnCalendar from SCHEDULE (drop-in), Persistent=true
 #     claude-routine@<name>.service     oneshot: claude-routine <name>
-#     claude-remote-update.service.d/bgd.conf   nightly: restart a claude-bgd onto the new binary,
-#                                       only when no background session runs under it
 #
 # Usage: setup-claude-routines          (then: verify-agent-setup)
 set -euo pipefail
@@ -142,13 +142,13 @@ for f in "$r"/bin/*; do
   n=$(basename "$f"); m=755; [ "$n" = claude-profile-env ] && m=644
   put "$m" "/usr/local/bin/$n" "$f"
 done
-for f in "$r"/systemd/*; do
-  n=$(basename "$f")
-  case "$n" in
-    claude-remote-update.service.d-bgd.conf) put 644 /etc/systemd/system/claude-remote-update.service.d/bgd.conf "$f" ;;
-    *) put 644 "/etc/systemd/system/$n" "$f" ;;
-  esac
+for f in "$r"/systemd/*; do put 644 "/etc/systemd/system/$(basename "$f")" "$f"; done
+# Retired 2026-10-31: the nightly claude-bgd-update restart. The wrapper lets the daemon upgrade itself in
+# place; a restart is now the only thing that kills workers. The daemon-reload further down picks up the drop-in removal.
+for f in /usr/local/bin/claude-bgd-update /etc/systemd/system/claude-remote-update.service.d/bgd.conf; do
+  [ ! -e "$f" ] || { rm -f "$f"; echo "  removed $f (retired)"; }
 done
+rmdir /etc/systemd/system/claude-remote-update.service.d 2>/dev/null || true
 for f in "$r"/jobs/*.md; do put 644 "/home/claude-agent/agent-jobs/$(basename "$f")" "$f" claude-agent; done
 [ ! -f "$r/husky/init.sh" ] || put 644 /home/claude-agent/.config/husky/init.sh "$r/husky/init.sh" claude-agent
 for f in "$r"/ready/*.py; do n=$(basename "$f"); m=644; case "$n" in test_*) ;; *) m=755;; esac; put "$m" "/home/claude-agent/work/$n" "$f" claude-agent; done
