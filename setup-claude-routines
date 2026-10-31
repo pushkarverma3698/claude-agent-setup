@@ -15,15 +15,21 @@
 #                   (routine-verdict: whose PRs count).
 #     <name>.conf   bash fragment: PROFILE (main|alt|alt2, or a comma list such as alt,alt2,main: the
 #                   first account whose usage limit is not hit runs it), REPO (~/work/<REPO>), SCHEDULE
-#                   (systemd OnCalendar), ARGS (extra claude flags, e.g. --model haiku --permission-mode dontAsk)
+#                   (space-separated HH:MM times, daily in SCHEDULE_TZ (default UTC): SCHEDULE="03:04 15:00" is one timer
+#                   with two OnCalendar lines; a string with a * or - is one systemd OnCalendar line, as before;
+#                   routines/bin/routine-schedule does the parsing), ARGS (extra claude flags, e.g. --model haiku --permission-mode dontAsk)
 #                   MODE=print (optional): no --bg session. The wrapper runs `claude -p` and sends the
 #                   final stdout to Telegram itself, so a read-only routine needs no claude-notify
 #                   permission and no model-typed shell command (2026-10-26: a Haiku run wrote
 #                   `claude-notify "…" ; echo "exit=$?"`, dontAsk refused the compound command, and the
 #                   digest never arrived). The prompt just prints the message.
+#                   PAUSED=1 (optional): the routine keeps its definition and schedule drop-in but its timer is
+#                   stopped and disabled, and `claude-routine <name>` exits 0 at once. Unset or 0: runs as usual.
 #                   VERDICT=<group>, VERDICT_AT=HH:MM:SS (UTC), VERDICT_REPOS=("tag|owner/repo|bases" …),
 #                   optional VERDICT_CHECKS=("owner/repo|check" …) and VERDICT_QUEUE="<cmd printing READY (n)>":
 #                   the code-only routine-verdict group for this routine (routine-new writes them)
+#                   TRACKER_REPO, TRACKER_PATH, CODE_REPO, WORK_BASE (+ optional keys): the project's task tracker, read by
+#                   routines/bin/tracker from the same file (README "Tracker"); routine-new writes them
 #                   GUARD_REPOS=("owner/repo|bases=…|branch=…" …): the PR, claim and dispatch rules token-guard.py
 #                   applies to those repos; routine-policy documents the fields and writes routine-policy.json
 #     <name>.md     the prompt
@@ -49,7 +55,7 @@
 #                                       transient daemon inside the timer's unit, killed when it ends. The
 #                                       wrapper, not the daemon, is the MainPID, so the daemon handing over to
 #                                       a successor after a launcher update no longer kills the workers.
-#     claude-routine@<name>.timer       OnCalendar from SCHEDULE (drop-in), Persistent=true
+#     claude-routine@<name>.timer       one OnCalendar per SCHEDULE time (drop-in), Persistent=true
 #     claude-routine@<name>.service     oneshot: claude-routine <name>
 #
 # Usage: setup-claude-routines          (then: verify-agent-setup)
@@ -69,10 +75,12 @@ for c in "$DEFS"/*.conf; do
   n=$(basename "$c" .conf)
   [[ "$n" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "bad routine name: $n (a-z, 0-9, -)" >&2; exit 1; }
   [[ -f "$DEFS/$n.md" ]] || { echo "routine $n: missing $n.md" >&2; exit 1; }
-  ( set +u; PROFILE=; REPO=; SCHEDULE=; MODE=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
+  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; PAUSED=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
     [[ "$PROFILE" =~ ^(main|alt|alt2)(,(main|alt|alt2))*$ ]] || { echo "routine $n: PROFILE must be main, alt, alt2 or a comma list of them" >&2; exit 1; }
     [[ -z "${MODE:-}" || "$MODE" == print ]] || { echo "routine $n: MODE must be empty or print" >&2; exit 1; }
+    [[ -z "${PAUSED:-}" || "$PAUSED" =~ ^[01]$ ]] || { echo "routine $n: PAUSED must be empty, 0 or 1" >&2; exit 1; }
     [[ -n "$REPO" && -n "$SCHEDULE" ]] || { echo "routine $n: REPO and SCHEDULE are required" >&2; exit 1; }
+    "$HERE/routines/bin/routine-schedule" "$SCHEDULE" "${SCHEDULE_TZ:-}" >/dev/null || { echo "routine $n: bad SCHEDULE" >&2; exit 1; }
     [ -n "$VERDICT" ] || exit 0
     [[ "$VERDICT" =~ ^[a-z0-9][a-z0-9-]*$ && "$VERDICT" != all ]] || { echo "routine $n: VERDICT must be a-z, 0-9, - (not all)" >&2; exit 1; }
     [[ "$VERDICT_AT" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$ ]] || { echo "routine $n: VERDICT_AT must be HH:MM:SS (UTC)" >&2; exit 1; }
@@ -158,9 +166,8 @@ rm -r "$STAGE"
 # again. With Persistent=true a moved schedule otherwise fires a catch-up run at once (2026-10-26: moving a
 # verdict schedule fired its routine-verdict@ timer on re-enable). New timers start the same way.
 rearm=()
-sched_dropin() { # sched_dropin <timer unit> <OnCalendar>
-  local d="/etc/systemd/system/$1.d/schedule.conf" new
-  new=$(printf '[Timer]\nOnCalendar=\nOnCalendar=%s' "$2")
+sched_dropin() { # sched_dropin <timer unit> <drop-in text: [Timer], an empty OnCalendar=, then one OnCalendar= per time>
+  local d="/etc/systemd/system/$1.d/schedule.conf" new=$2
   [ "$new" = "$(cat "$d" 2>/dev/null)" ] && return 0
   if systemctl is-active -q "$1"; then systemctl stop "$1"; rearm+=("$1"); fi
   printf '%s\n' "$new" | put_stdin 644 "$d"
@@ -179,17 +186,18 @@ prune() { # prune <unit prefix> <wanted names> <what>: disable and remove timers
 
 # Schedules: one drop-in per definition; a timer whose definition is gone is disabled and removed.
 # Verdict groups come from the same files: VERDICT=<group>, VERDICT_AT=<HH:MM:SS UTC>.
-want="" vwant=""
+want="" vwant="" paused_units=""
 for c in /etc/claude-routines/*.conf; do
   [ -e "$c" ] || continue
   n=$(basename "$c" .conf); want="$want $n"
-  sched=$(bash -c 'source "$1"; printf %s "$SCHEDULE"' _ "$c")
-  systemd-analyze calendar "$sched" >/dev/null 2>&1 || { echo "  routine $n: bad SCHEDULE '$sched'" >&2; exit 1; }
-  sched_dropin "claude-routine@$n.timer" "$sched"
+  { read -r sched; read -r stz; read -r paused; } < <(bash -c 'source "$1"; printf "%s\n%s\n%s\n" "$SCHEDULE" "${SCHEDULE_TZ:-}" "${PAUSED:-0}"' _ "$c")
+  dropin=$(/usr/local/bin/routine-schedule --dropin "$sched" "$stz") || { echo "  routine $n: bad SCHEDULE '$sched'" >&2; exit 1; }
+  sched_dropin "claude-routine@$n.timer" "$dropin"
+  if [ "$paused" = 1 ]; then paused_units="$paused_units claude-routine@$n.timer"; fi
   read -r vg vat < <(bash -c 'source "$1"; printf "%s %s\n" "${VERDICT:-}" "${VERDICT_AT:-}"' _ "$c")
   [ -n "${vg:-}" ] || continue
   vwant="$vwant $vg"
-  sched_dropin "routine-verdict@$vg.timer" "*-*-* $vat UTC"
+  sched_dropin "routine-verdict@$vg.timer" "$(printf '[Timer]\nOnCalendar=\nOnCalendar=*-*-* %s UTC' "$vat")"
 done
 prune claude-routine "$want" routine
 prune routine-verdict "$vwant" "verdict group"
@@ -199,7 +207,9 @@ arm() { # arm <timer unit>: enable it; a stopped one starts with its stamp at no
   systemctl is-active -q "$1" && return 0
   touch "/var/lib/systemd/timers/stamp-$1"; systemctl start "$1"
 }
-for t in "${rearm[@]}"; do arm "$t"; echo "  $t: schedule changed, re-armed without a catch-up run"; done
+for t in "${rearm[@]}"; do
+  case " $paused_units " in *" $t "*) continue;; esac
+  arm "$t"; echo "  $t: schedule changed, re-armed without a catch-up run"; done
 
 # Daemons: a transient daemon (from an ad-hoc `claude --bg`) holds the profile's socket; the service
 # starts only when none runs, and never kills a transient one that still has sessions.
@@ -222,9 +232,18 @@ for g in $vwant; do
 done
 systemctl enable --now claude-routine-resume.timer >/dev/null 2>&1
 echo "  claude-routine-resume.timer next: $(systemctl show -p NextElapseUSecRealtime --value claude-routine-resume.timer)"
+settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
+  if [ "$2" = 1 ]; then
+    systemctl disable --now "$1" >/dev/null 2>&1 || true
+    echo "  $1: paused (PAUSED=1 in $3.conf)"
+  else
+    arm "$1"
+    echo "  $1 next: $(systemctl show -p NextElapseUSecRealtime --value "$1")"
+  fi
+}
 for n in $want; do
-  arm "claude-routine@$n.timer"
-  echo "  claude-routine@$n.timer next: $(systemctl show -p NextElapseUSecRealtime --value "claude-routine@$n.timer")"
+  p=0; case " $paused_units " in *" claude-routine@$n.timer "*) p=1;; esac
+  settle "claude-routine@$n.timer" "$p" "$n"
 done
 ROOT
 

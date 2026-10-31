@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# routine-schedule [--dropin] <SCHEDULE> [<SCHEDULE_TZ>]
+# The one place a conf's SCHEDULE becomes systemd OnCalendar lines (setup-claude-routines and routine-new both call it).
+#   SCHEDULE="03:04 15:00"    space-separated HH:MM, each daily in SCHEDULE_TZ (default UTC):
+#                             OnCalendar=*-*-* 03:04:00 UTC and OnCalendar=*-*-* 15:00:00 UTC
+#   SCHEDULE="*-*-* 02:00:00 UTC"   anything with a * or a - is a systemd calendar string and is passed through as one line
+#                             (the format every conf used before 2026-10-31; SCHEDULE_TZ is ignored for it)
+# Prints one OnCalendar value per line (the timer needs one `OnCalendar=` per line), or with --dropin the whole
+# claude-routine@<name>.timer.d/schedule.conf: `[Timer]`, `OnCalendar=` (clears the template's), then the lines.
+# Exit 2 with the reason on stderr when a time is not HH:MM, the zone is not a plain zone name, or the list is empty;
+# every line is also checked with `systemd-analyze calendar` when that tool is installed (the VPS; not macOS).
+set -euo pipefail
+dropin=0
+[ "${1:-}" = --dropin ] && { dropin=1; shift; }
+[ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: routine-schedule [--dropin] <SCHEDULE> [<SCHEDULE_TZ>]" >&2; exit 2; }
+sched=$1 tz=${2:-}
+tz=${tz:-UTC}
+bad() { echo "routine-schedule: $*" >&2; exit 2; }
+lines=()
+if [[ "$sched" == *'*'* || "$sched" == *-* ]]; then
+  lines=("$sched")
+else
+  [[ "$tz" =~ ^[A-Za-z][A-Za-z0-9_+/-]*$ ]] || bad "SCHEDULE_TZ '$tz' is not a zone name (UTC, Europe/Amsterdam, Asia/Kolkata)"
+  read -ra times <<<"$sched"
+  [ ${#times[@]} -gt 0 ] || bad "SCHEDULE is empty: write HH:MM times such as \"03:04 15:00\""
+  for t in "${times[@]}"; do
+    [[ "$t" =~ ^([01][0-9]|2[0-3]):([0-5][0-9])$ ]] || bad "'$t' in SCHEDULE is not HH:MM (24 h); use a space between times, e.g. \"03:04 15:00\""
+    lines+=("*-*-* ${BASH_REMATCH[1]}:${BASH_REMATCH[2]}:00 $tz")
+  done
+fi
+if command -v systemd-analyze >/dev/null 2>&1; then
+  for l in "${lines[@]}"; do systemd-analyze calendar "$l" >/dev/null 2>&1 || bad "systemd does not accept '$l'"; done
+fi
+if [ $dropin = 1 ]; then
+  printf '[Timer]\nOnCalendar='
+  printf '\nOnCalendar=%s' "${lines[@]}"
+  printf '\n'
+else
+  printf '%s\n' "${lines[@]}"
+fi
