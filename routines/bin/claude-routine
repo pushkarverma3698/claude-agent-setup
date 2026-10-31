@@ -173,9 +173,14 @@ if [ $# -eq 0 ]; then
   exit 0
 fi
 MODE= BASE=
+# PAUSED=1 in the conf: the routine stays defined but does nothing, even on a manual `systemctl start`.
+exit_if_paused() {
+  [ "${PAUSED:-0}" != 1 ] || { echo "claude-routine: $1 is paused (PAUSED=1)" >&2; exit 0; }
+}
 if [ $# -eq 1 ]; then
   [ -f "$D/$1.conf" ] || { echo "claude-routine: no routine $1 in $D" >&2; exit 64; }
-  ARGS=(); source "$D/$1.conf"
+  ARGS=(); PAUSED=; source "$D/$1.conf"
+  exit_if_paused "$1"
   set -- "$PROFILE" "$REPO" "$1" "$D/$1.md" -- "${ARGS[@]}"
 fi
 [ $# -ge 4 ] || { echo "usage: claude-routine <main|alt|alt2>[,…] <repo> <name> <prompt-file> [-- claude flags]" >&2; exit 64; }

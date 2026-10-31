@@ -23,6 +23,8 @@
 #                   permission and no model-typed shell command (2026-10-26: a Haiku run wrote
 #                   `claude-notify "…" ; echo "exit=$?"`, dontAsk refused the compound command, and the
 #                   digest never arrived). The prompt just prints the message.
+#                   PAUSED=1 (optional): the routine keeps its definition and schedule drop-in but its timer is
+#                   stopped and disabled, and `claude-routine <name>` exits 0 at once. Unset or 0: runs as usual.
 #                   VERDICT=<group>, VERDICT_AT=HH:MM:SS (UTC), VERDICT_REPOS=("tag|owner/repo|bases" …),
 #                   optional VERDICT_CHECKS=("owner/repo|check" …) and VERDICT_QUEUE="<cmd printing READY (n)>":
 #                   the code-only routine-verdict group for this routine (routine-new writes them)
@@ -73,9 +75,10 @@ for c in "$DEFS"/*.conf; do
   n=$(basename "$c" .conf)
   [[ "$n" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "bad routine name: $n (a-z, 0-9, -)" >&2; exit 1; }
   [[ -f "$DEFS/$n.md" ]] || { echo "routine $n: missing $n.md" >&2; exit 1; }
-  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
+  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; PAUSED=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
     [[ "$PROFILE" =~ ^(main|alt|alt2)(,(main|alt|alt2))*$ ]] || { echo "routine $n: PROFILE must be main, alt, alt2 or a comma list of them" >&2; exit 1; }
     [[ -z "${MODE:-}" || "$MODE" == print ]] || { echo "routine $n: MODE must be empty or print" >&2; exit 1; }
+    [[ -z "${PAUSED:-}" || "$PAUSED" =~ ^[01]$ ]] || { echo "routine $n: PAUSED must be empty, 0 or 1" >&2; exit 1; }
     [[ -n "$REPO" && -n "$SCHEDULE" ]] || { echo "routine $n: REPO and SCHEDULE are required" >&2; exit 1; }
     "$HERE/routines/bin/routine-schedule" "$SCHEDULE" "${SCHEDULE_TZ:-}" >/dev/null || { echo "routine $n: bad SCHEDULE" >&2; exit 1; }
     [ -n "$VERDICT" ] || exit 0
@@ -183,13 +186,14 @@ prune() { # prune <unit prefix> <wanted names> <what>: disable and remove timers
 
 # Schedules: one drop-in per definition; a timer whose definition is gone is disabled and removed.
 # Verdict groups come from the same files: VERDICT=<group>, VERDICT_AT=<HH:MM:SS UTC>.
-want="" vwant=""
+want="" vwant="" paused_units=""
 for c in /etc/claude-routines/*.conf; do
   [ -e "$c" ] || continue
   n=$(basename "$c" .conf); want="$want $n"
-  { read -r sched; read -r stz; } < <(bash -c 'source "$1"; printf "%s\n%s\n" "$SCHEDULE" "${SCHEDULE_TZ:-}"' _ "$c")
+  { read -r sched; read -r stz; read -r paused; } < <(bash -c 'source "$1"; printf "%s\n%s\n%s\n" "$SCHEDULE" "${SCHEDULE_TZ:-}" "${PAUSED:-0}"' _ "$c")
   dropin=$(/usr/local/bin/routine-schedule --dropin "$sched" "$stz") || { echo "  routine $n: bad SCHEDULE '$sched'" >&2; exit 1; }
   sched_dropin "claude-routine@$n.timer" "$dropin"
+  if [ "$paused" = 1 ]; then paused_units="$paused_units claude-routine@$n.timer"; fi
   read -r vg vat < <(bash -c 'source "$1"; printf "%s %s\n" "${VERDICT:-}" "${VERDICT_AT:-}"' _ "$c")
   [ -n "${vg:-}" ] || continue
   vwant="$vwant $vg"
@@ -203,7 +207,9 @@ arm() { # arm <timer unit>: enable it; a stopped one starts with its stamp at no
   systemctl is-active -q "$1" && return 0
   touch "/var/lib/systemd/timers/stamp-$1"; systemctl start "$1"
 }
-for t in "${rearm[@]}"; do arm "$t"; echo "  $t: schedule changed, re-armed without a catch-up run"; done
+for t in "${rearm[@]}"; do
+  case " $paused_units " in *" $t "*) continue;; esac
+  arm "$t"; echo "  $t: schedule changed, re-armed without a catch-up run"; done
 
 # Daemons: a transient daemon (from an ad-hoc `claude --bg`) holds the profile's socket; the service
 # starts only when none runs, and never kills a transient one that still has sessions.
@@ -226,9 +232,18 @@ for g in $vwant; do
 done
 systemctl enable --now claude-routine-resume.timer >/dev/null 2>&1
 echo "  claude-routine-resume.timer next: $(systemctl show -p NextElapseUSecRealtime --value claude-routine-resume.timer)"
+settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
+  if [ "$2" = 1 ]; then
+    systemctl disable --now "$1" >/dev/null 2>&1 || true
+    echo "  $1: paused (PAUSED=1 in $3.conf)"
+  else
+    arm "$1"
+    echo "  $1 next: $(systemctl show -p NextElapseUSecRealtime --value "$1")"
+  fi
+}
 for n in $want; do
-  arm "claude-routine@$n.timer"
-  echo "  claude-routine@$n.timer next: $(systemctl show -p NextElapseUSecRealtime --value "claude-routine@$n.timer")"
+  p=0; case " $paused_units " in *" claude-routine@$n.timer "*) p=1;; esac
+  settle "claude-routine@$n.timer" "$p" "$n"
 done
 ROOT
 

@@ -147,6 +147,72 @@ class SlotSkipWiring(unittest.TestCase):
         self.assertIn('slot_busy "$name" "$p" "$id" "$st" "$f"; then exit 0; fi', src)
 
 
+class Paused(unittest.TestCase):
+    """PAUSED=1 in a routine's conf: definition and drop-in stay, the timer does not run."""
+    SETUP = os.path.join(ROOT, "setup-claude-routines")
+
+    def run_bash(self, script):
+        d = tempfile.mkdtemp()
+        try:
+            log = f"{d}/calls.log"
+            fakes = "\n".join(f'{t}() {{ echo "{t} $*" >> "{log}"; }}' for t in ("claude", "systemctl", "git", "flock"))
+            r = subprocess.run(["bash", "-c", f"set -uo pipefail\n{fakes}\n{script}"], capture_output=True, text=True)
+            calls = read(log).splitlines() if os.path.exists(log) else []
+            return r, calls
+        finally:
+            shutil.rmtree(d)
+
+    def paused_run(self, paused_line):
+        funcs = extract(ROUTINE, "exit_if_paused")
+        return self.run_bash(f'{funcs}\n{paused_line}\nexit_if_paused demo\necho reached')
+
+    def test_claude_routine_exits_zero_with_one_line_and_starts_nothing(self):
+        r, calls = self.paused_run("PAUSED=1")
+        self.assertEqual((r.returncode, r.stdout, calls), (0, "", []), r.stderr)
+        self.assertEqual(r.stderr.strip(), "claude-routine: demo is paused (PAUSED=1)")
+
+    def test_claude_routine_runs_on_when_unset_or_zero(self):
+        for line in ("PAUSED=", "PAUSED=0", "unset PAUSED"):
+            r, _ = self.paused_run(line)
+            self.assertEqual((r.returncode, r.stdout.strip(), r.stderr), (0, "reached", ""), line)
+
+    def test_claude_routine_checks_after_the_conf_is_read_and_before_the_lock(self):
+        src = read(ROUTINE)
+        i, j, k = src.index('source "$D/$1.conf"'), src.index('exit_if_paused "$1"'), src.index("flock -w 200")
+        self.assertLess(i, j)
+        self.assertLess(j, k)
+
+    def settle(self, paused):
+        funcs = extract(self.SETUP, "settle")
+        fake_arm = 'arm() { echo "arm $1" >> "$LOG"; }'
+        d = tempfile.mkdtemp()
+        try:
+            log = f"{d}/calls.log"
+            fake_sc = 'systemctl() { if [ "$1" = show ]; then echo soon; else echo "systemctl $*" >> "$LOG"; fi; }'
+            r = subprocess.run(["bash", "-c", f"set -uo pipefail\nLOG={log}\n{fake_arm}\n{fake_sc}\n{funcs}\nsettle claude-routine@demo.timer {paused} demo"],
+                               capture_output=True, text=True)
+            return r, (read(log).splitlines() if os.path.exists(log) else [])
+        finally:
+            shutil.rmtree(d)
+
+    def test_setup_disables_a_paused_timer_instead_of_arming_it(self):
+        r, calls = self.settle(1)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(calls, ["systemctl disable --now claude-routine@demo.timer"])
+        self.assertEqual(r.stdout.strip(), "claude-routine@demo.timer: paused (PAUSED=1 in demo.conf)")
+
+    def test_setup_arms_an_unpaused_timer(self):
+        r, calls = self.settle(0)
+        self.assertEqual(calls, ["arm claude-routine@demo.timer"])
+        self.assertEqual(r.stdout.strip(), "claude-routine@demo.timer next: soon")
+
+    def test_setup_keeps_the_drop_in_for_a_paused_routine_and_skips_its_rearm(self):
+        src = read(self.SETUP)
+        # the drop-in is written before the paused flag is looked at; the rearm loop skips paused timers
+        self.assertLess(src.index('sched_dropin "claude-routine@$n.timer"'), src.index('paused_units="$paused_units'))
+        self.assertIn('*" $t "*) continue', src)
+
+
 FAKE_GH = r'''#!/usr/bin/env python3
 """A fake gh with one state file ($FAKE_STATE): repos, branches, files, calls."""
 import json, os, sys
