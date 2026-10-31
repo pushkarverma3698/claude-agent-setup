@@ -14,8 +14,9 @@
 # (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; mode 0640 root:claude-agent). Never fails the caller: exit 0
 # always, "sent" on stdout when Telegram answered ok, the reason on stderr otherwise.
 
-# & first so the entities it adds are not re-escaped.
-notify_escape() { local s=$1; s=${s//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; printf '%s' "$s"; }
+# & first so the entities it adds are not re-escaped. bash 5.2 reads an & in a ${s//x/&y} replacement as the matched
+# text (patsub_replacement), which turned "<" into "<lt;"; the shopt is absent before 5.2, hence the || true.
+notify_escape() { shopt -u patsub_replacement 2>/dev/null || true; local s=$1; s=${s//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; printf '%s' "$s"; }
 
 # notify_split <dir> <limit>: text on stdin -> <dir>/part.001, part.002 ...
 notify_split() {
