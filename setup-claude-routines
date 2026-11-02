@@ -159,6 +159,7 @@ r="$STAGE/routines"
 put 755 /usr/local/bin/claude-notify "$STAGE/claude-notify"
 put 755 /usr/local/bin/routine-verdict "$STAGE/routine-verdict"
 for f in "$r"/bin/*; do
+  [ -f "$f" ] || continue   # a test run leaves routines/bin/__pycache__ in the checkout
   n=$(basename "$f"); m=755; [ "$n" = claude-profile-env ] && m=644
   put "$m" "/usr/local/bin/$n" "$f"
 done
