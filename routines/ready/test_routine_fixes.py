@@ -142,7 +142,7 @@ class LiveRunGuard(unittest.TestCase):
             write(f"{d}/t.jsonl", '{"type":"assistant","timestamp":"%s"}\n' % ts(lead_age_min))
             if sub_age_min is not None:
                 write(f"{d}/t/subagents/a.jsonl", '{"type":"assistant","timestamp":"%s"}\n' % ts(sub_age_min))
-            funcs = extract(ROUTINE, "newest_record", "live_run", "stalled")
+            funcs = extract(ROUTINE, "newest_record", "live_run")
             r = subprocess.run(["bash", "-c", f'set -uo pipefail\n{funcs}\nlive_run {d}/state.json {d}/t.jsonl; echo $?'],
                                capture_output=True, text=True)
             return r.stdout.strip()

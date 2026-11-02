@@ -1,0 +1,81 @@
+#!/bin/bash
+# routine-sweep [--dry-run]   (hourly, routine-sweep.timer; replaces claude-routine-resume)
+# For each /etc/claude-routines/*.conf with TRACKER_REPO set and not PAUSED=1, reads the tracker (`tracker next --json`):
+#   - dead run: a routine run of this conf that `claude agents` lists as failed/stopped (started in the last 24 h) gets ONE
+#     Telegram, marker per job id. Checked before the start below, because claude-routine removes the old runs.
+#   - leftovers: rows that are active but past their lease. Runs `claude-routine <name>`, which skips itself while the
+#     routine's lead is still working (live_run, a record under 45 min old) and which probes the account when PROFILE
+#     is a comma list. Not repeated here. New work stays with the routine's own SCHEDULE.
+#   - Blocked rows: re-sent daily (marker per row + reason + day) until the row changes. `tracker block` sent the first one.
+# --dry-run prints each decision and starts, sends and writes nothing (`tracker next` still repairs tracker drift, as always).
+# 2026-10-31: replaces resume_one, which guessed from a session's state file and transcript why a run stopped; the tracker
+# row says it (a leftover is a lease past 6 h), and that holds for phone and laptop runs too.
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+set -uo pipefail
+[ -n "${SWEEP_NO_SUDO:-}" ] || [ "$(id -un)" = claude-agent ] || exec sudo -n -u claude-agent -H "$0" "$@"
+dry=0; [ "${1:-}" = --dry-run ] && dry=1
+D=${SWEEP_CONF_DIR:-/etc/claude-routines}
+S=${SWEEP_STATE_DIR:-/home/claude-agent/.cache/routine-sweep}
+PENV=${SWEEP_PROFILE_ENV:-/usr/local/bin/claude-profile-env}
+export HOME=${SWEEP_HOME:-${HOME:-/home/claude-agent}}
+[ $dry = 1 ] || mkdir -p "$S"
+rc=0
+
+say() { echo "routine-sweep: $*"; }
+# notify <marker> <text>: one Telegram, unless the marker exists. claude-notify prints "sent" only when Telegram accepted it,
+# so a failed send leaves no marker and the next sweep tries again.
+notify() {
+  [ ! -e "$S/$1" ] || return 0
+  if [ $dry = 1 ]; then say "would notify ($1): $(tr '\n' '|' <<<"$2")"; return 0; fi
+  if [[ "$(claude-notify "$2" 2>&1)" == *sent* ]]; then : >"$S/$1"; say "notified ($1)"; else say "notify failed ($1); next hour" >&2; rc=1; fi
+}
+hhmm() { # hhmm <epoch>: HH:MM in NOTIFY_TZ (GNU or BSD date)
+  TZ=${NOTIFY_TZ:-UTC} date -d "@$1" '+%H:%M' 2>/dev/null || TZ=${NOTIFY_TZ:-UTC} date -r "$1" '+%H:%M'; }
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || date +%s; }
+
+dead_runs() { # dead_runs <name> <profiles> <next json>
+  local n=$1 plist=$2 json=$3 p id st t left
+  for p in ${plist//,/ }; do
+    ( source "$PENV" "$p" && cd "$HOME" &&
+      "$claude" agents --json --all 2>/dev/null | jq -r --arg p "routine: $n " --argjson since "$(( $(date +%s) - 86400 ))" \
+        '.[] | select(.kind == "background" and ((.name // "") | startswith($p)) and (.state == "failed" or .state == "stopped") and ((.startedAt // 0) / 1000 > $since)) | .id' ) | while read -r id; do
+      st=$( source "$PENV" "$p"; echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id/state.json" )
+      t=$([ -f "$st" ] && mtime "$st" || date +%s)
+      left=$(jq -r --arg id "$id" '[.leftover[] | select((.run // "") | contains($id)) | .task] | if length > 0 then . else [.[]?] end | join(", ")' <<<"$json")
+      [ -n "$left" ] || left=$(jq -r '[.leftover[].task] | join(", ")' <<<"$json")
+      notify "dead-$id" "$n $id died $(hhmm "$t") ${NOTIFY_TZ_LABEL:-UTC}, ${left:-no task} back in queue"
+    done
+  done
+}
+
+blocked_rows() { # blocked_rows <name> <next json>: re-send daily; skipped when the row changed in the last 20 h (tracker block just sent it)
+  local n=$1 json=$2 row f key
+  while read -r row; do
+    f() { jq -r --arg k "$1" '.[$k] // ""' <<<"$row"; }
+    [ "$(jq -r '.age_s' <<<"$row")" -ge 72000 ] || continue
+    key="blocked-$n-$(f task)-$(printf %s "$(f blocker)" | cksum | cut -d' ' -f1)-$(date -u +%F)"
+    notify "$key" "STILL BLOCKED $n $(f task) - $(f title)"$'\n'"$(f blocker)"$'\n'"environment: $(f environment | sed 's/^$/-/')  run: $(f run | sed 's/^$/-/')"$'\n'"branch: $(f branch | sed 's/^$/-/')  PR: $(f pr | sed 's/^$/-/')"$'\n'"(sent again every day until the row changes)"
+  done < <(jq -c '.blocked[] | . + {age_s: (try ((now - ((.updated // "") | sub("Z$"; ":00Z") | fromdateiso8601)) | floor) catch 999999999)}' <<<"$json")
+}
+
+sweep_one() { # sweep_one <conf>
+  local c=$1 n json left
+  n=$(basename "$c" .conf)
+  ( set +u; TRACKER_REPO=; PAUSED=; PROFILE=; source "$c" >/dev/null 2>&1
+    [ -n "$TRACKER_REPO" ] || { say "skip $n: no TRACKER_REPO"; exit 0; }
+    [ "$PAUSED" != 1 ] || { say "skip $n: paused (PAUSED=1)"; exit 0; }
+    json=$(tracker next --json --conf "$c") || { say "skip $n: tracker next failed (exit $?)" >&2; exit 1; }
+    jq -e . >/dev/null 2>&1 <<<"$json" || { say "skip $n: tracker next printed no JSON" >&2; exit 1; }
+    dead_runs "$n" "${PROFILE:-main}" "$json"
+    blocked_rows "$n" "$json"
+    left=$(jq -r '[.leftover[].task] | join(", ")' <<<"$json")
+    if [ -z "$left" ]; then say "skip $n: no leftovers"; exit 0; fi
+    if [ $dry = 1 ]; then say "would start $n: leftovers $left (claude-routine skips it if a lead is live)"; exit 0; fi
+    say "start $n: leftovers $left"
+    claude-routine "$n" || { say "claude-routine $n failed (exit $?)" >&2; exit 1; } )
+}
+
+shopt -s nullglob
+for c in "$D"/*.conf; do sweep_one "$c" || rc=1; done
+[ $dry = 1 ] || find "$S" -type f -mtime +30 -delete 2>/dev/null || true
+exit $rc

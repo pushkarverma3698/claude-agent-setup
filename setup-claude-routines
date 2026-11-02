@@ -57,6 +57,8 @@
 #                                       transient daemon inside the timer's unit, killed when it ends. The
 #                                       wrapper, not the daemon, is the MainPID, so the daemon handing over to
 #                                       a successor after a launcher update no longer kills the workers.
+#     routine-sweep.timer               hourly at :17: routines/bin/routine-sweep restarts a lead for leftover tracker rows, sends
+#                                       one Telegram per dead run and a daily reminder per Blocked row (replaces claude-routine-resume)
 #     claude-routine@<name>.timer       one OnCalendar per SCHEDULE time (drop-in), Persistent=true
 #     claude-routine@<name>.service     oneshot: claude-routine <name>
 #
@@ -130,10 +132,11 @@ echo "== routines: scripts, units and job files (real files in this folder and t
 #   routines/systemd/*               -> /etc/systemd/system
 #   routines/jobs/*.md               -> /home/claude-agent/agent-jobs (claude-agent owns them; founder-actions.md
 #                                       lives only there: it is runtime state, never copied)
-#   routines/ready/*                 -> /home/claude-agent/work (ready-set scripts and their tests)
+#   routines/ready/*                 -> /home/claude-agent/work (ready-set scripts; test_*.py stay in the repo)
+#   skills/<name>/                   -> <each profile>/skills/<name> (main ~/.claude, alt ~/.claude-alt, alt2 ~/.claude-alt2)
 #   routines/husky/init.sh           -> /home/claude-agent/.config/husky/init.sh (env for repos' pre-push hooks)
 stage=$(ssh "$HOST" 'mktemp -d')
-( cd "$HERE" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - claude-notify routine-verdict routines ) | ssh "$HOST" "tar -xf - -C '$stage'"
+( cd "$HERE" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - claude-notify routine-verdict routines $( [ -d skills ] && echo skills ) ) | ssh "$HOST" "tar -xf - -C '$stage'"
 [ -z "$OVERLAY" ] || [ ! -d "$OVERLAY/routines" ] || ( cd "$OVERLAY" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - routines ) | ssh "$HOST" "tar -xf - -C '$stage'"
 ssh "$HOST" "sudo -n env STAGE='$stage' bash -s" <<'ROOT'
 set -euo pipefail
@@ -161,7 +164,17 @@ done
 rmdir /etc/systemd/system/claude-remote-update.service.d 2>/dev/null || true
 for f in "$r"/jobs/*.md; do put 644 "/home/claude-agent/agent-jobs/$(basename "$f")" "$f" claude-agent; done
 [ ! -f "$r/husky/init.sh" ] || put 644 /home/claude-agent/.config/husky/init.sh "$r/husky/init.sh" claude-agent
-for f in "$r"/ready/*.py; do n=$(basename "$f"); m=644; case "$n" in test_*) ;; *) m=755;; esac; put "$m" "/home/claude-agent/work/$n" "$f" claude-agent; done
+for f in "$r"/ready/*.py; do n=$(basename "$f"); case "$n" in test_*) continue;; esac; put 755 "/home/claude-agent/work/$n" "$f" claude-agent; done
+# Skills: every skills/<name>/ of this repo goes into each claude-agent profile's skills folder (skipped when the checkout has none).
+for s in "$STAGE"/skills/*/; do
+  [ -d "$s" ] || continue
+  for cfg in /home/claude-agent/.claude /home/claude-agent/.claude-alt /home/claude-agent/.claude-alt2; do
+    d="$cfg/skills/$(basename "$s")"
+    diff -rq "$s" "$d" >/dev/null 2>&1 && continue
+    [ ! -d "$d" ] || rm -r -- "$d"
+    mkdir -p "$cfg/skills"; cp -r "$s" "$d"; chown -R claude-agent:claude-agent "$cfg/skills"; echo "  wrote $d"
+  done
+done
 rm -r "$STAGE"
 
 # A timer whose OnCalendar changes is stopped here; after the reload its stamp is set to now before it starts
@@ -232,8 +245,14 @@ for g in $vwant; do
   arm "routine-verdict@$g.timer"
   echo "  routine-verdict@$g.timer next: $(systemctl show -p NextElapseUSecRealtime --value "routine-verdict@$g.timer")"
 done
-systemctl enable --now claude-routine-resume.timer >/dev/null 2>&1
-echo "  claude-routine-resume.timer next: $(systemctl show -p NextElapseUSecRealtime --value claude-routine-resume.timer)"
+# Retired 2026-10-31: claude-routine-resume (hourly --resume-stopped); routine-sweep replaces it.
+for u in claude-routine-resume.timer claude-routine-resume.service; do
+  systemctl disable --now "$u" >/dev/null 2>&1 || true
+  [ ! -e "/etc/systemd/system/$u" ] || { rm -f "/etc/systemd/system/$u"; echo "  removed $u (replaced by routine-sweep)"; }
+done
+systemctl daemon-reload
+systemctl enable --now routine-sweep.timer >/dev/null 2>&1
+echo "  routine-sweep.timer next: $(systemctl show -p NextElapseUSecRealtime --value routine-sweep.timer)"
 settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
   if [ "$2" = 1 ]; then
     systemctl disable --now "$1" >/dev/null 2>&1 || true

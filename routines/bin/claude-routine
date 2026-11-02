@@ -5,7 +5,6 @@
 # (2026-10-25: a nightly run died at once with "You've hit your session limit" because the one
 # account it ran on had spent its 5-hour window during the day).
 # claude-routine                 (list the routines)
-# claude-routine --resume-stopped  (hourly, claude-routine-resume.timer: see resume_one)
 # Starts one routine run as a background Claude session with Remote Control, in its own git worktree at a fixed
 # path (~/work/wt/<name>, optional BASE=<branch> in the conf; default origin/HEAD). No `-w`: that flag put the
 # session behind the platform's worktree fence (2026-10-26: 27-39% of builder commands refused).
@@ -25,8 +24,7 @@ title_of() { local v="TITLE_${1//-/_}"; echo "${!v:-$1}"; }
 # 2026-10-27u format: line 1 marker (✅ ⏳ ⚠️ ❌) + plain result, line 2 "You need to: …" or "Nothing needed from you.", then ≤3 "• " bullets.
 notify() { local r; r=$(/usr/local/bin/claude-notify "$1" 2>&1) || true; logger -t claude-routine "notify ${name:-?}: ${r:-no answer from claude-notify}" 2>/dev/null || true; } # journal gets "sent" or the Bot API error (2026-10-27)
 now_ist() { TZ=${NOTIFY_TZ:-UTC} date '+%H:%M'; }
-# One lock per routine, shared by the scheduled start and the resume pass, so neither acts on a run
-# the other is replacing or waking.
+# One lock per routine, so two starts of the same routine do not replace each other's run.
 L=/home/claude-agent/.cache/claude-routine; mkdir -p "$L"
 # 2026-10-29: probe_ok took any answer containing "ok" as usable ("OAuth token has expired" has "token") and an empty
 # one (120 s timeout, "529 overloaded") as out of usage: at 10:51 UTC alt2 and alt answered empty after a global OOM
@@ -59,21 +57,7 @@ probe_msg() { # probe_msg <profile>: one plain line for the log
   esac
 }
 
-# 2026-10-27: a routine run that stopped on an error (usually "You've hit your … limit") sat stopped until the
-# next day's run removed it. resume_one <profile> <job id> wakes such a run in the same session (worktree,
-# context, name, Remote Control) once its account answers again, at most $max times per run. Any error counts,
-# not only the usage limit (a crash waited a day too). ROUTINE_RESUME_DRY=1 prints the decision and wakes nothing.
-max=3
-last_error() { # last_error <transcript>: the error of the run's last main-chain turn ("" = none), when it is from the last 20 h
-  local last; last=$(jq -c 'select(.type == "assistant" and (.isSidechain | not)) | [.error // "", .timestamp // ""]' "$1" 2>/dev/null | tail -1 || true)
-  [ -n "$last" ] && [ -n "$(jq -r '.[0]' <<<"$last")" ] || return 0
-  [ $(( $(date +%s) - $(date -d "$(jq -r '.[1]' <<<"$last")" +%s) )) -lt 72000 ] && jq -r '.[0]' <<<"$last"
-  return 0
-}
-# 2026-10-29: one routine run hit alt2's session limit at 06:05 with 5 builders mid-request. No turn recorded an
-# error, the job stayed "working", and last_error found nothing to wake. stalled <state.json> <transcript>: the
-# job says working but no record of the session (lead or subagent) is newer than 45 min, within the last 20 h.
-# Record timestamps, not mtimes: the lead file's mtime moved at 07:04 with its last record at 06:25.
+# Record timestamps, not mtimes (2026-10-29): the lead file's mtime moved at 07:04 with its last record at 06:25.
 newest_record() { # newest_record <transcript>: epoch of the newest record of the session or any subagent ("" = none)
   local p t s newest=0
   for p in "$1" "${1%.jsonl}"/subagents/*.jsonl; do
@@ -82,13 +66,6 @@ newest_record() { # newest_record <transcript>: epoch of the newest record of th
     [ -n "$t" ] && s=$(date -d "$t" +%s 2>/dev/null) && [ "$s" -gt "$newest" ] && newest=$s || true
   done
   [ "$newest" -gt 0 ] && echo "$newest" || true
-}
-stalled() {
-  [ "$(jq -r '.state // ""' "$1")" = working ] || return 1
-  local newest age; newest=$(newest_record "$2")
-  [ -n "$newest" ] || return 1
-  age=$(( $(date +%s) - newest ))
-  [ "$age" -ge 2700 ] && [ "$age" -lt 72000 ]
 }
 # live_run <state.json> <transcript>: working with a record under 45 min old. A manual start must not kill it
 # (10-29 10:49: `systemctl start claude-routine@<name>` removed live run 72c597ce).
@@ -103,70 +80,6 @@ slot_busy() {
   live_run "$4" "$5" || return 1
   echo "claude-routine: slot skipped, $1 run $3 ($2) is still working (last record $(( ($(date +%s) - $(newest_record "$5")) / 60 )) min ago); it is left alone"
 }
-resume_one() (
-  st="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$2/state.json"
-  [ -f "$st" ] || exit 0
-  f=$(jq -r '.linkScanPath // empty' "$st"); sid=$(jq -r '.sessionId // empty' "$st")
-  name=$(jq -r '.name // ""' "$st" | awk '{print $2}')
-  [ -f "$f" ] && [ -n "$sid" ] && [ -n "$name" ] && [ ! -e "$L/given-up-$2" ] || exit 0
-  err=$(last_error "$f"); [ -n "$err" ] || { stalled "$st" "$f" && err=stalled; } || exit 0
-  k=$(jq -r 'select(.type == "user" and (.message.content | type) == "string") | .message.content' "$f" | grep -c '\[routine-resume [0-9]' || true)
-  if [ "$k" -ge $max ]; then
-    : >"$L/given-up-$2"
-    notify "$(title_of "$name") — you need to: open it in the Claude app and type continue."$'\n'"It stopped $max times and will not restart by itself (last error: $err)."; exit 0
-  fi
-  if [ "${ROUTINE_RESUME_DRY:-0}" = 1 ]; then echo "would resume $name ($2, $1): last turn is error '$err', resume $((k+1))/$max"; exit 0; fi
-  exec 9>"$L/$name.lock"; flock -n 9 || { echo "$name: its scheduled start is running; next hour"; exit 0; }
-  [ -f "$st" ] || exit 0
-  probe_ok || { echo "$name ($2, $1): $(probe_msg "$1"); next hour"; exit 0; }
-  ( bgd_ready "$1" ) || exit 0
-  # --resume on a session the daemon still holds starts a copy, so stop it and wait for the daemon's
-  # "bg settled <id>" line; without flags it then wakes the same job. 2026-10-27: a busy run left
-  # `claude agents` (pid gone, state stopped) before the daemon settled it, and the wake made a copy.
-  dlog="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/daemon.log"
-  settled() { # the daemon's last claim/settle line for job $1 is a settle (or the log no longer names it)
-    local l; l=$(grep -E "bg (claimed-spare|settled) $1 " "$dlog" 2>/dev/null | tail -1 || true)
-    [ -z "$l" ] || [[ "$l" == *" settled "* ]]
-  }
-  wd=$(jq -r '.worktreePath // empty' "$st"); [ -n "$wd" ] || wd=$(jq -r '.cwd // empty' "$f" | head -1)
-  [ -d "$wd" ] || { echo "$name ($2): $wd is gone; cannot resume" >&2; exit 0; }
-  why_stopped="this account hit its usage limit; it has reset now"
-  [ "$err" = rate_limit ] || [ "$err" = stalled ] || why_stopped="of an error ($err)"
-  msg="You stopped because $why_stopped. Continue the job file from where you stopped: check what your agents already finished (git, PRs), restart any that died, and carry on with the remaining steps. [routine-resume $((k+1))/$max]"
-  for try in 1 2; do
-    "$claude" stop "$2" >/dev/null 2>&1 || true
-    for _ in $(seq 120); do settled "$2" && break; sleep 1; done
-    settled "$2" || { echo "$name ($2): the daemon has not settled it 120 s after stop; next hour"; exit 0; }
-    out=$(cd "$wd" && timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" --resume "$sid" -- "$msg" </dev/null 2>&1 | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' || true)
-    grep -q "woke session $2" <<<"$out" && break
-    copy=$(grep -oE 'started a copy as [0-9a-f]+' <<<"$out" | awk '{print $NF}' || true)
-    if [ -n "$copy" ]; then
-      "$claude" stop "$copy" >/dev/null 2>&1 || true
-      for _ in $(seq 60); do settled "$copy" && break; sleep 1; done
-      "$claude" rm "$copy" >/dev/null 2>&1 || true
-    fi
-    echo "$name ($2): wake attempt $try failed: $(tr '\n' ' ' <<<"$out" | cut -c1-200)" >&2
-  done
-  if grep -q "woke session $2" <<<"$out"; then
-    echo "resumed $name ($2, $1) $((k+1))/$max"
-    notify "$(title_of "$name") — nothing needed from you."$'\n'"It paused and is running again ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
-  elif grep -q "Couldn't reach the background service" <<<"$out"; then
-    # 2026-10-27: at load 31 the daemon did not answer the CLI within 45 s; that passes, so try next hour.
-    echo "$name ($2, $1): the background service did not answer (VPS load?); next hour"
-  else
-    : >"$L/given-up-$2"
-    notify "$(title_of "$name") — you need to: open it in the Claude app and type continue."$'\n'"It stopped and could not restart itself. Error: $(tr '\n' ' ' <<<"$out" | cut -c1-100)"
-  fi
-)
-if [ "${1:-}" = --resume-stopped ]; then
-  for p in main alt alt2; do (
-    source /usr/local/bin/claude-profile-env "$p"; cd /home/claude-agent
-    for id in $("$claude" agents --json --all 2>/dev/null | jq -r '.[] | select(.kind == "background" and ((.name // "") | startswith("routine: "))) | .id'); do
-      resume_one "$p" "$id" || echo "resume check of $id ($p) failed" >&2
-    done ) || echo "resume pass for $p failed" >&2
-  done
-  exit 0
-fi
 if [ $# -eq 0 ]; then
   for c in "$D"/*.conf; do [ -e "$c" ] || continue; n=$(basename "$c" .conf)
     ( source "$c"; printf '%-28s %-14s %-24s %s\n' "$n" "$PROFILE" "$REPO" "$SCHEDULE" ); done
