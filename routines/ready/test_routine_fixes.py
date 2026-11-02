@@ -329,7 +329,7 @@ class VerdictThreeFacts(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertRegex(sent, r"1\. Finished: yes, ended \d\d:\d\d UTC")
         self.assertIn("2. Merged: 1", sent)
-        self.assertIn("feat: add widget", sent)
+        self.assertIn("add widget: ci success", sent)  # the "feat:" prefix is dropped
         self.assertIn("ci success", sent)
         self.assertIn("https://github.com/acme/app/pull/7", sent)
         self.assertIn("Tests green and merged, not deployed.", sent)

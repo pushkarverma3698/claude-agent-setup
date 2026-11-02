@@ -188,7 +188,8 @@ run_status() { # routine
   [ -n "$svc" ] || { RUN_WHY="$r run NOT VERIFIED (cannot read its systemd unit)"; return; }
   res=$(sed -n 's/^Result=//p' <<<"$svc"); code=$(sed -n 's/^ExecMainStatus=//p' <<<"$svc")
   ts=$(sed -n 's/^ExecMainExitTimestamp=//p' <<<"$svc"); act=$(sed -n 's/^ActiveState=//p' <<<"$svc")
-  if [ "$act" != inactive ]; then RUN_WHY="$r service still $act"; return
+  # a service that exited non-zero is ActiveState=failed, not inactive: that is a dead run, not a running one
+  if [ "$act" != inactive ] && [ "$act" != failed ]; then RUN_WHY="$r service still $act"; return
   elif [ "$res" != success ] || [ "$code" != 0 ]; then RUN_WHY="$r service FAILED (Result=$res, exit $code)"; return
   elif [ -z "$ts" ] || [ "$(date -u -d "$ts" +%s 2>/dev/null || echo 0)" -lt "$(date -u -d "$cutoff" +%s 2>/dev/null || echo 0)" ]
   then RUN_WHY="$r did not run in the last ${HOURS}h (last exit: ${ts:-never})"; return; fi
