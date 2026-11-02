@@ -467,7 +467,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
@@ -478,7 +478,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-13-login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-13-login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-13-login --title t --body-file fixes12.md\"}}",
  "stdout": ""
 }
@@ -489,7 +489,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-120-x`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-120-x`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-120-x --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
@@ -566,7 +566,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd <T>/opfix && gh pr create -R widgets-co/widgets-api --base beta --title t --body-file <T>/closes12.md\"}}",
  "stdout": ""
 }
@@ -577,7 +577,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
