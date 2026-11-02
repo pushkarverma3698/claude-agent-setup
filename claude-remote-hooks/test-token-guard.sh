@@ -192,6 +192,39 @@ for m in "" --pr-only; do
   pr allow "git push origin --delete feat/t1-old" "branch delete untouched" $m
 done
 run allow "$(b 'git push origin feat/t1-x')" "push in a non-task-repo repo untouched"
+# owner check before push (2026-10-31: a session woken after a takeover pushed over the new owner's branch): every
+# non-delete push runs `tracker check` in the push dir, in any repo; exit 5 (taken over) or 2 (error) refuses it.
+mkdir -p "$T/fakebin" "$T/nobin"
+cat >"$T/fakebin/tracker" <<'SH'
+#!/bin/bash
+echo "$PWD $*" >>"$FAKE_TRACKER_LOG"
+[ -n "$FAKE_TRACKER_SLEEP" ] && sleep "$FAKE_TRACKER_SLEEP"
+[ -n "$FAKE_TRACKER_ERR" ] && echo "$FAKE_TRACKER_ERR" >&2
+exit "${FAKE_TRACKER_RC:-0}"
+SH
+chmod +x "$T/fakebin/tracker"
+PY=$(command -v python3); export FAKE_TRACKER_LOG="$T/tracker.calls"
+PK_GIT="$T/pack"; git init -q "$PK_GIT" 2>/dev/null; git -C "$PK_GIT" remote add origin "$T/gh/acme/design-pack.git" 2>/dev/null
+tk() { # tk <expect: deny|allow> <tracker rc> <path> <cwd> <command> <label> [stderr-must-contain]
+  : >"$FAKE_TRACKER_LOG"
+  out=$(printf '{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"%s","tool_input":{"command":%s}}' "$4" \
+    "$(jq -Rn --arg c "$5" '$c')" | FAKE_TRACKER_RC=$2 PATH="$3:/usr/bin:/bin" "$PY" "$H" $8 2>"$T/tk.err"); rc=$?
+  case "$1" in deny) [ $rc -eq 2 ] && grep -q "${7:-BLOCKED}" "$T/tk.err" ;; allow) [ $rc -eq 0 ] && [ -z "$out" ] ;; esac \
+    && echo "ok   $1  $6 $8" || { echo "FAIL $1  $6 $8 (rc=$rc $(cat "$T/tk.err"))"; fail=1; }; }
+calls() { wc -l <"$FAKE_TRACKER_LOG" | tr -d ' '; }
+for m in "" --pr-only; do
+  FAKE_TRACKER_ERR="tracker: taken over by someone-else: stop, do not push" \
+    tk deny  5 "$T/fakebin" "$T/tr" "git push origin feat/t247-disputes" "taken-over session's push refused with tracker's stderr" "taken over by someone-else" $m
+  [ "$(calls)" = 1 ] && grep -q "/tr check\$" "$FAKE_TRACKER_LOG" && echo "ok   tracker check ran once in the push dir" || { echo "FAIL tracker call: $(cat "$FAKE_TRACKER_LOG")"; fail=1; }
+  FAKE_TRACKER_ERR="tracker: no token" tk deny 2 "$T/fakebin" "$T/tr" "git push origin feat/t247-disputes" "tracker config/API error fails closed" "no token" $m
+  tk allow 0 "$T/fakebin" "$T/tr" "git push origin feat/t247-disputes" "still the owner: push allowed" "" $m
+  FAKE_TRACKER_ERR="tracker: taken over by x" tk deny 5 "$T/fakebin" "$T/pack" "git push origin chore/x" "taken over in a repo outside the claimed list: refused" "taken over by x" $m
+  FAKE_TRACKER_ERR="tracker: taken over by x" tk deny 5 "$T/fakebin" "$T" "git -C $T/pack push origin chore/x" "git -C dir is the check dir" "taken over by x" $m
+  tk allow 0 "$T/nobin" "$T/tr" "git push origin feat/t247-disputes" "tracker not installed: skipped" "" $m
+  tk allow 5 "$T/fakebin" "$T/tr" "git push origin --delete feat/t1-old" "delete push: tracker not called" "" $m
+  [ "$(calls)" = 0 ] && echo "ok   delete push never reached tracker" || { echo "FAIL delete push called tracker"; fail=1; }
+  FAKE_TRACKER_SLEEP=3 TOKEN_GUARD_TRACKER_TIMEOUT=1 tk deny 0 "$T/fakebin" "$T/tr" "git push origin feat/t247-disputes" "tracker timeout fails closed" "timed out" $m
+done
 # exact owner/repo (2026-10-29: the nightly lead, cwd in a task-api worktree, ran `R=<design pack>;
 # gh pr create -R $R --base main`; `$R` was not read and the design-pack backlog PR got the task-repo rules)
 PK="$T/gh/acme/design-pack.git"; mkdir -p "$PK"; git init -q --bare "$PK"
