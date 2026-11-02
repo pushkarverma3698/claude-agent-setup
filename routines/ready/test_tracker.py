@@ -62,8 +62,8 @@ case "$1" in
   --release) [ -f "$FAKE_GH_DIR/keep" ] && exit 3; git -C "$FAKE_ORIGIN" branch -qD "$3" 2>/dev/null; echo released ;;
   --resume) echo "CLAIM_HOURS=${CLAIM_HOURS:-12}" >> "$FAKE_GH_DIR/cb.log"   # claim-branch refuses a claim commit younger than CLAIM_HOURS
             [ -f "$FAKE_GH_DIR/tip_age" ] && [ "$(cat "$FAKE_GH_DIR/tip_age")" -lt "${CLAIM_HOURS:-12}" ] && { echo "claim-branch: claimed $(cat "$FAKE_GH_DIR/tip_age")h ago, someone holds the task" >&2; exit 3; }
-            echo claimsha ;;
-  *) git -C "$FAKE_ORIGIN" branch "$2" main && echo claimsha ;;
+            echo "noise line"; echo 2222222222222222222222222222222222222222 ;;
+  *) git -C "$FAKE_ORIGIN" branch "$2" main && echo 1111111111111111111111111111111111111111 ;;
 esac
 '''
 FAKE_NOTIFY = '#!/usr/bin/env bash\n[ -f "$FAKE_GH_DIR/notify.fail" ] && exit 1\ncat >> "$FAKE_GH_DIR/notify.log"; echo "---" >> "$FAKE_GH_DIR/notify.log"\n'
@@ -232,6 +232,13 @@ class Behaviour(Sandbox):
             self.assertIn(f"{kind} T-101", out)
         self.assertEqual(out.splitlines()[0], "NEXT LEFTOVER T-101")
 
+    def assert_hook_parses(self, line, branch, sha):
+        """The CLAIMED line must satisfy token-guard's dispatch regexes, or every builder prompt built from it is refused."""
+        m = re.search(r"\bbranch\s+`?([\w.-]+/[\w./-]+?)`?(?=\.?(?:[\s,;)]|$))", line)
+        self.assertTrue(m and m.group(1) == branch, line)
+        m = re.search(r"\bclaim\s+`?([0-9a-f]{7,40})\b", line)
+        self.assertTrue(m and m.group(1) == sha, line)
+
     def test_04_leftover_first_then_resume(self):
         self.branch_on_remote("feat/t101-thing", 9)
         self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(9)), row("T-102", "Next one")])
@@ -241,6 +248,7 @@ class Behaviour(Sandbox):
         r = self.tracker("claim", "T-101")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("--resume acme/app feat/t101-thing", self.log("cb.log"))
+        self.assert_hook_parses(r.stdout, "feat/t101-thing", "2" * 40)
         got = self.rows()["T-101"]
         self.assertEqual((got["Status"], got["Branch"], got["Environment"], got["Run"]), ("Claimed", "feat/t101-thing", "laptop", "runA"))
         self.assertRegex(got["Holder"], r"^laptop:runA:[0-9a-f]{6}$")
@@ -284,7 +292,8 @@ class Behaviour(Sandbox):
         self.assertIn("LEFTOVER T-101", self.tracker("next").stdout)
         r = self.tracker("claim", "T-101")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("CLAIMED T-101 branch=feat/t101-thing-2 ", r.stdout)
+        self.assertIn("CLAIMED T-101 branch feat/t101-thing-2 claim 1111111111111111111111111111111111111111 worktree=", r.stdout)
+        self.assert_hook_parses(r.stdout, "feat/t101-thing-2", "1" * 40)
         self.assertIn("acme/app feat/t101-thing-2 main", self.log("cb.log"))
         self.assertEqual(self.rows()["T-101"]["Branch"], "feat/t101-thing-2")
 

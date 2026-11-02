@@ -576,6 +576,11 @@ def cmd_claim(cfg, a):
     sys.stderr.write(r.stderr)
     if r.returncode:
         raise Fail(3 if r.returncode == 3 else 2, f"claim-branch exit {r.returncode} for {branch}")
+    # claim-branch prints the claim commit sha as its last stdout line; the token-guard dispatch check wants it in the CLAIMED line
+    lines = [x.strip() for x in r.stdout.splitlines() if x.strip()]
+    sha = lines[-1] if lines else ""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", sha):
+        raise Fail(2, f"claim-branch printed no claim sha for {branch} (last stdout line: {sha!r})")
     rd = cfg["REPO_DIR"]
     gitc = lambda *x, cwd=rd: subprocess.run(["git", "-C", cwd, *x], capture_output=True, text=True)
     f = gitc("fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
@@ -605,8 +610,8 @@ def cmd_claim(cfg, a):
         raise
     gd = git_dir(wt)
     with open(os.path.join(gd, "tracker-claim"), "w") as fh:
-        json.dump({"project": cfg["PROJECT"], "conf": cfg["CONF"], "task": task, "holder": holder, "branch": branch, "claimed_at": stamp()}, fh)
-    print(f"CLAIMED {task} branch={branch} worktree={wt} holder={holder}")
+        json.dump({"project": cfg["PROJECT"], "conf": cfg["CONF"], "task": task, "holder": holder, "branch": branch, "claim": sha, "claimed_at": stamp()}, fh)
+    print(f"CLAIMED {task} branch {branch} claim {sha} worktree={wt} holder={holder}")
 
 
 def holder_cmd(cfg, a, label, edit, allow_unheld=False, touch=True):
