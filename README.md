@@ -20,11 +20,12 @@ Needs `git`, `python3`, `jq` and `gh`. No VPS needed. Run from the clone:
 
 ```bash
 git clone https://github.com/pushkarverma3698/claude-agent-setup && cd claude-agent-setup
-mkdir -p ~/.claude/hooks ~/.claude/skills
+mkdir -p ~/.claude/hooks ~/.claude/skills ~/.local/bin
 install -m 755 claude-remote-hooks/token-guard.py claude-remote-hooks/guard-bash.sh ~/.claude/hooks/
 [ ! -d ~/.claude/hooks/token_guard ] || rm -r ~/.claude/hooks/token_guard
 cp -R claude-remote-hooks/token_guard ~/.claude/hooks/   # must sit next to token-guard.py
-cp -R skills/work-the-tracker ~/.claude/skills/
+cp -R skills/work-the-tracker skills/agy-loop ~/.claude/skills/
+ln -sfn "$PWD/agy" "$PWD/agy-guard" ~/.local/bin/
 ```
 
 Register the hooks in `~/.claude/settings.json`. With no settings file yet, this writes one (the clone path is filled in for `session-brief`); with an existing file, merge its `hooks` key by hand:
@@ -78,6 +79,7 @@ cp ~/.claude/hooks/routine-policy.json ~/.claude/hooks/routine-policy.defaults.j
 ./claude-remote-hooks/test-token-guard-golden.sh
 python3 routines/ready/test_claim_branch.py
 python3 routines/ready/test_tracker.py
+python3 routines/ready/test_agy.py
 python3 routines/ready/test_routine_fixes.py   # some cases need GNU tools (run on Linux)
 ```
 
