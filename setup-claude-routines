@@ -28,6 +28,8 @@
 #                   VERDICT=<group>, VERDICT_AT=HH:MM:SS (UTC), VERDICT_REPOS=("tag|owner/repo|bases" …),
 #                   optional VERDICT_CHECKS=("owner/repo|check" …) and VERDICT_QUEUE="<cmd printing READY (n)>":
 #                   the code-only routine-verdict group for this routine (routine-new writes them)
+#                   VERDICT_NOTE="<text>" (optional): printed under the merged PRs in that group's verdict, e.g. for a project
+#                   with no deploy: "Tests green and merged, not deployed."
 #                   TRACKER_REPO, TRACKER_PATH, CODE_REPO, WORK_BASE (+ optional keys): the project's task tracker, read by
 #                   routines/bin/tracker from the same file (README "Tracker"); routine-new writes them
 #                   GUARD_REPOS=("owner/repo|bases=…|branch=…" …): the PR, claim and dispatch rules token-guard.py

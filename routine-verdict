@@ -1,9 +1,13 @@
 #!/bin/bash
 # routine-verdict [<group>|all]   (default: all; groups = VERDICT= in /etc/claude-routines/*.conf)
-# After each daily routine, sends the founder one Telegram message per group. Wording (2026-10-27, plain for a
-# reader who has not seen the code): line 1 = the result with a marker, line 2 = "You need to:" or "Nothing needed",
-# then the first PR that did not pass (title, why, link), "+N more", and the count of tasks left in the queue.
-# A run that is paused on a usage limit says "still running, resumes ~HH:MM in NOTIFY_TZ" (next tick of claude-routine-resume.timer).
+# After each daily routine, sends the founder one Telegram message per group, as three facts (2026-11-02):
+#   1. Finished?   did the routine's last run finish (and when), or is it still running / paused / dead
+#   2. Merged      PRs merged since the previous verdict, each with the check that proved it (name + conclusion);
+#                  the conf's VERDICT_NOTE (e.g. "tests green and merged, not deployed") is printed under them
+#   3. Needs you   open PRs that fail a rule, a run that crashed or a check that could not read GitHub, and, when the
+#                  conf sets TRACKER_REPO, the tracker rows with Status Blocked (`tracker next --json`)
+# A group with no run, nothing merged, nothing blocked and an empty queue prints one "idle" line. A group whose routine
+# has PAUSED=1 is skipped. A run that is paused on a usage limit says so; routine-sweep.timer restarts it.
 # The readiness rules below are unchanged; only the text is plain. The journal line keeps PROD-READY n/m. No model is involved:
 # every line comes from the GitHub API, systemd or a command result. Runs on the VPS as claude-agent
 # (routine-verdict@<group>.timer at the conf's VERDICT_AT, e.g. 17:30 UTC). Installed by
@@ -28,7 +32,9 @@
 #
 # Env: DRY_RUN=1 prints instead of sending; ROUTINE_VERDICT_HOURS (26); ROUTINE_VERDICT_SINCE (ISO UTC);
 # ROUTINE_VERDICT_STATE (dir, default ~/.local/state/routine-verdict); ROUTINE_VERDICT_NOTIFY (claude-notify);
-# ROUTINE_VERDICT_BRANCH_RE (head-branch filter, for tests).
+# ROUTINE_VERDICT_BRANCH_RE (head-branch filter, for tests); ROUTINE_VERDICT_TRACKER (the tracker command, default
+# `tracker` on PATH); ROUTINE_VERDICT_WORK (/home/claude-agent/work) and ROUTINE_VERDICT_PROFILE_ENV
+# (/usr/local/bin/claude-profile-env) for where the run's Claude session is looked up (tests point them at fakes).
 # Exit 1 when GitHub could not be read or Telegram did not answer "sent".
 set -uo pipefail
 export GH_PROMPT_DISABLED=1 NO_COLOR=1 LC_ALL=C.UTF-8 2>/dev/null || true
@@ -43,25 +49,34 @@ HOURS=${ROUTINE_VERDICT_HOURS:-26}
 NOTIFY=${ROUTINE_VERDICT_NOTIFY:-/usr/local/bin/claude-notify}
 BRANCH_RE=${ROUTINE_VERDICT_BRANCH_RE:-'^(feat/t[0-9]|task/issue-|fix/)'}
 STATE_DIR=${ROUTINE_VERDICT_STATE:-$HOME/.local/state/routine-verdict}
+TRACKER=${ROUTINE_VERDICT_TRACKER:-tracker}
+WORK=${ROUTINE_VERDICT_WORK:-/home/claude-agent/work}
+PENV=${ROUTINE_VERDICT_PROFILE_ENV:-/usr/local/bin/claude-profile-env}
 
 # Groups come from the routine definitions (2026-10-27; were hard-coded here): a <name>.conf with VERDICT=<group>
 # gives the group, VERDICT_REPOS (tag|owner/repo|bases, bases space separated), VERDICT_CHECKS (repo|check that must
 # exist AND be success on the head SHA, rule r) and VERDICT_QUEUE (a command printing "READY (n)" first; unset = count
 # the agent:ready/working/review issue labels). routine-new writes these; setup-claude-routines arms the timer.
 SPECS=() REQ=() GRPS=()
-declare -A ROUTINE_OF=() QUEUE_OF=()
+declare -A ROUTINE_OF=() QUEUE_OF=() PAUSED_OF=() TRACKER_OF=() NOTE_OF=()
 for c in "$DEFS"/*.conf; do
   [ -e "$c" ] || continue
   n=$(basename "$c" .conf)
-  out=$( set +u; VERDICT=; VERDICT_QUEUE=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c" >/dev/null 2>&1
+  out=$( set +u; VERDICT=; VERDICT_QUEUE=; VERDICT_NOTE=; PAUSED=; TRACKER_REPO=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c" >/dev/null 2>&1
          [ -n "$VERDICT" ] || exit 0
          printf 'G\t%s\t%s\n' "$VERDICT" "$VERDICT_QUEUE"
+         [ "$PAUSED" != 1 ] || printf 'P\t%s\t1\n' "$VERDICT"
+         [ -z "$TRACKER_REPO" ] || printf 'T\t%s\t%s\n' "$VERDICT" "$TRACKER_REPO"
+         [ -z "$VERDICT_NOTE" ] || printf 'N\t%s\t%s\n' "$VERDICT" "${VERDICT_NOTE//$'\n'/ }"
          for s in "${VERDICT_REPOS[@]}"; do printf 'S\t%s|%s\n' "$VERDICT" "$s"; done
          for s in "${VERDICT_CHECKS[@]}"; do printf 'R\t%s\n' "$s"; done )
   while IFS=$'\t' read -r k a b; do
     case $k in
       G) [ -z "${ROUTINE_OF[$a]:-}" ] || { echo "routine-verdict: group $a is in both ${ROUTINE_OF[$a]} and $n" >&2; exit 64; }
          ROUTINE_OF[$a]=$n; QUEUE_OF[$a]=$b; GRPS+=("$a") ;;
+      P) PAUSED_OF[$a]=1 ;;
+      T) TRACKER_OF[$a]=$b ;;
+      N) NOTE_OF[$a]=$b ;;
       S) SPECS+=("$a") ;;
       R) REQ+=("$a") ;;
     esac
@@ -126,6 +141,14 @@ def rule_r($req):
       | if $x == null then "\($n) not reported" elif $x.ok then empty else "\($n) \(if $x.done then $x.res else "pending" end)" end ] as $bad
   | if ($bad|length) > 0 then "required check: \($bad|join("; "))" else empty end;
 
+# What proved a PR: the required checks (name + result) when the repo has any, else the first checks reported.
+def proof($req):
+  norm_rollup as $c
+  | if ($req|length) > 0
+    then [ $req[] as $n | ([$c[]|select(.name == $n)][0]) as $x
+           | "\($n) \(if $x == null then "not reported" elif $x.done then $x.res else "pending" end)" ]
+    else [ $c[] | select(.name != "routine/review") | "\(.name) \(if .done then .res else "pending" end)" ][0:3] end;
+
 def made_since($since):
   (.createdAt // "") >= $since or (.mergedAt // "") >= $since
   or any(norm_rollup[]; .name == "routine/review" and .at >= $since);
@@ -133,7 +156,7 @@ def made_since($since):
 $prs
 | map(select(.state == "OPEN" or .state == "MERGED"))
 | map(select(made_since($since)))
-| map({number, title, url, state, reason:
+| map({number, title, url, state, mergedAt, proof: proof($req), reason:
     ( if .state == "OPEN" then first(rule_a, rule_b, rule_c, rule_d, rule_f, rule_r($req), null)
       else first(rule_a, rule_c, rule_d, rule_r($req), null) end )})
 JQ
@@ -164,7 +187,8 @@ run_status() { # routine
   [ -n "$svc" ] || { RUN_WHY="$r run NOT VERIFIED (cannot read its systemd unit)"; return; }
   res=$(sed -n 's/^Result=//p' <<<"$svc"); code=$(sed -n 's/^ExecMainStatus=//p' <<<"$svc")
   ts=$(sed -n 's/^ExecMainExitTimestamp=//p' <<<"$svc"); act=$(sed -n 's/^ActiveState=//p' <<<"$svc")
-  if [ "$act" != inactive ]; then RUN_WHY="$r service still $act"; return
+  # a service that exited non-zero is ActiveState=failed, not inactive: that is a dead run, not a running one
+  if [ "$act" != inactive ] && [ "$act" != failed ]; then RUN_WHY="$r service still $act"; return
   elif [ "$res" != success ] || [ "$code" != 0 ]; then RUN_WHY="$r service FAILED (Result=$res, exit $code)"; return
   elif [ -z "$ts" ] || [ "$(date -u -d "$ts" +%s 2>/dev/null || echo 0)" -lt "$(date -u -d "$cutoff" +%s 2>/dev/null || echo 0)" ]
   then RUN_WHY="$r did not run in the last ${HOURS}h (last exit: ${ts:-never})"; return; fi
@@ -172,7 +196,7 @@ run_status() { # routine
   profiles=$(source "$conf" 2>/dev/null; echo "$PROFILE"); repo=$(source "$conf" 2>/dev/null; echo "$REPO")
   rows=""
   for p in ${profiles//,/ }; do
-    rows+=$( set +u; cd "/home/claude-agent/work/$repo" && source /usr/local/bin/claude-profile-env "$p" >/dev/null 2>&1 \
+    rows+=$( set +u; cd "$WORK/$repo" && source "$PENV" "$p" >/dev/null 2>&1 \
              && timeout 60 "$claude" agents --json --all 2>/dev/null \
              | jq -c --arg pr "routine: $r " --arg p "$p" '.[]|select(.kind=="background" and ((.name//"")|startswith($pr)))|. + {profile:$p}' )$'\n'
   done
@@ -187,7 +211,7 @@ run_status() { # routine
   # Any message counts, not only the last: on 10-28 a run answered two later wake-ups after its report.
   if [ "$v" = "session state=blocked" ]; then
     local id f; id=$(jq -r '.id' <<<"$sess"); p=$(jq -r '.profile' <<<"$sess")
-    f=$( set +u; source /usr/local/bin/claude-profile-env "$p" >/dev/null 2>&1
+    f=$( set +u; source "$PENV" "$p" >/dev/null 2>&1
          jq -r '.linkScanPath // empty' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id/state.json" 2>/dev/null )
     [ -f "$f" ] && jq -rs 'map(select(.type == "assistant" and (.isSidechain | not))
         | [.message.content[]? | select(.type == "text") | .text] | join("") | select(length > 0)) | .[]' "$f" 2>/dev/null \
@@ -196,39 +220,42 @@ run_status() { # routine
   if [ "$v" = ok ]; then RUN_OK=1; else RUN_WHY="$r run not finished: $v"; fi
 }
 
-# ---- run metrics (2026-10-29: the founder wants how long the run took, what it started, built and merged,
-# and whether memory ran out, in the daily message instead of separate pings). Sets MTXT; empty when unknown.
+# ---- when the run ended and how long it took, and whether memory ran out (2026-10-29: the founder wants this in the daily
+# message instead of separate pings). Sets RUN_END ("HH:MM UTC" from the session's last record, empty when unknown), RUN_DUR,
+# MEMTXT (only when memory ran out) and OOM_NOW.
 OOM_FILE=/sys/fs/cgroup/claude.slice/memory.events
 metrics_of() { # group
-  local st end f p agents dur merged kills k0 k1
-  MTXT=""
+  local st end e f p dur k0 k1
+  RUN_END="" RUN_DUR="" MEMTXT="" OOM_NOW=""
   [ -n "${SESS:-}" ] || return 0
   st=$(jq -r '(.startedAt/1000)|floor' <<<"$SESS"); p=$(jq -r .profile <<<"$SESS")
-  f=$( set +u; source /usr/local/bin/claude-profile-env "$p" >/dev/null 2>&1
+  f=$( set +u; source "$PENV" "$p" >/dev/null 2>&1
        echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(jq -r '.cwd' <<<"$SESS" | tr '/.' '--')/$(jq -r .sessionId <<<"$SESS").jsonl" )
-  end=$(date +%s); agents=""
-  if [ -f "$f" ]; then
-    agents=$(jq -s '[.[]|select(.type=="assistant")|.message.content[]?|select(.type=="tool_use" and .name=="Agent" and (.input.model // "") == "sonnet")]|length' "$f" 2>/dev/null)
-    [ "$RUN_OK" = 1 ] && end=$(date -u -d "$(jq -r 'select(.timestamp)|.timestamp' "$f" | tail -1)" +%s 2>/dev/null || date +%s)
+  end=$(date +%s)
+  if [ "$RUN_OK" = 1 ] && [ -f "$f" ]; then
+    e=$(date -u -d "$(jq -r 'select(.timestamp)|.timestamp' "$f" | tail -1)" +%s 2>/dev/null) \
+      && { end=$e; RUN_END=$(date -u -d "@$e" '+%H:%M UTC'); }
   fi
-  dur=$(( (end - st) / 60 )); dur="$((dur / 60))h $((dur % 60))m"
-  merged=$(jq '[.[]|select(.state == "MERGED")]|length' <<<"$allrecs")
-  kills="memory not checked"
+  dur=$(( (end - st) / 60 )); RUN_DUR="$((dur / 60))h $((dur % 60))m"
   k1=$(sed -n 's/^oom_kill //p' "$OOM_FILE" 2>/dev/null)
   if [ -n "$k1" ]; then
     k0=$(cat "$STATE_DIR/$1.oom" 2>/dev/null)
-    if ! [[ $k0 =~ ^[0-9]+$ ]]; then kills="memory: first count taken"
-    elif [ "$k1" -le "$k0" ]; then kills="memory never ran out"
-    else kills="memory ran out $((k1 - k0)) times"; fi
+    if [[ $k0 =~ ^[0-9]+$ ]] && [ "$k1" -gt "$k0" ]; then MEMTXT="memory ran out $((k1 - k0)) times"; fi
   fi
-  MTXT="Run: $( [ "$RUN_OK" = 1 ] && echo "took $dur" || echo "running for $dur so far" )${agents:+, $agents helpers started}, $(plural "$total" change) made, $merged merged, $kills."
   OOM_NOW=$k1
 }
 
-resume_at() { # next tick of the resume timer as HH:MM in NOTIFY_TZ, empty when unknown
-  local t; t=$(systemctl show -p NextElapseUSecRealtime --value claude-routine-resume.timer 2>/dev/null)
-  [ -n "$t" ] && TZ=${NOTIFY_TZ:-UTC} date -d "$t" +%H:%M 2>/dev/null || true
+# ---- the group's tracker rows with Status Blocked (only when its conf sets TRACKER_REPO); sets BLOCKED (JSON array of
+# {task,title,blocker}) and TRK_ERR. `tracker next --json` is the read path the tracker offers; it also reconciles rows.
+tracker_blocked() { # group
+  local out
+  BLOCKED="[]" TRK_ERR=""
+  [ -n "${TRACKER_OF[$1]:-}" ] || return 0
+  if out=$(timeout 120 "$TRACKER" next --json --conf "$DEFS/${ROUTINE_OF[$1]}.conf" 2>/dev/null) \
+     && BLOCKED=$(jq -c '.blocked // []' <<<"$out" 2>/dev/null) && [ -n "$BLOCKED" ]; then return 0; fi
+  BLOCKED="[]" TRK_ERR="the task tracker (${TRACKER_OF[$1]}) could not be read, so blocked tasks are unknown"
 }
+
 send() { # send <text>; sets rc=1 unless claude-notify answers sent
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '%s\n----\n' "$1"; return; fi
   local out; out=$("$NOTIFY" "$1" 2>&1); printf '%s\n' "$out"
@@ -307,6 +334,7 @@ plain_why() { # one entry of why[] -> a sentence a non-engineer can read
 for grp in "${GRPS[@]}"; do
   [ "$want" = all ] || [ "$want" = "$grp" ] || continue
   routine=${ROUTINE_OF[$grp]}
+  if [ "${PAUSED_OF[$grp]:-}" = 1 ]; then echo "routine-verdict: $grp skipped, $routine is paused (PAUSED=1)"; continue; fi
   run_status "$routine"
   RUN_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   SINCE=$cutoff; prev=""
@@ -337,65 +365,63 @@ for grp in "${GRPS[@]}"; do
   echo "routine-verdict: $grp ${v##*; }"
 
   reasons=""; for w in "${why[@]}"; do p=$(plain_why "$w") && reasons+="${reasons:+; }$p"; done
-  # ---- the message the founder reads (2026-10-27u: 3-second format) ----
-  # Line 1: marker + project + what it means. Line 2: "You need to: …" or "Nothing needed from you."
-  # Then the first failing PR (one bullet with its link) and "+N more". No PR numbers, ticket ids or ratios.
-  proj=$(proj_of "$routine"); nbad=$((total - ready))
+  # ---- the message the founder reads (2026-11-02: three facts) ----
+  # 1. Finished?  2. Merged + proof (+ the conf's VERDICT_NOTE)  3. Needs you. No PR numbers, ticket ids or ratios.
+  proj=$(proj_of "$routine")
   stuck=0; case "${RUN_WHY:-}" in *"state=blocked"*) stuck=1;; esac
-  crashed=0; case "${RUN_WHY:-}" in *"service FAILED"*|*"did not run in the last"*|*"no \"routine:"*|*"older than"*) crashed=1;; esac
-  items=$(jq -r -n --slurpfile recsf <(printf '%s' "$allrecs") --argjson max 1 --argjson rn "$RN" "$JQ_PLAIN"'
+  norun=0; case "${RUN_WHY:-}" in *"did not run in the last"*|*"no \"routine:"*|*"older than"*) norun=1;; esac
+  crashed=0; case "${RUN_WHY:-}" in *"service FAILED"*) crashed=1;; esac
+  metrics_of "$grp"
+  tracker_blocked "$grp"
+  nblocked=$(jq length <<<"$BLOCKED")
+  merged=$(jq -r -n --slurpfile recsf <(printf '%s' "$allrecs") --arg since "$SINCE" --argjson max 5 '
+    $recsf[0] | map(select(.state == "MERGED" and (.mergedAt // "") >= $since)) as $m
+    | def short: sub("^[a-z]+(\\([^)]*\\))?!?: *"; "") | sub(" *\\((T-[0-9]+|#[0-9]+)\\)$"; "") | .[0:60];
+      ($m|length), ($m[0:$max][] | "• \(.title | short): \(.proof | join("; "))\n  \(.url)"),
+      (if ($m|length) > $max then "• +\(($m|length) - $max) more" else empty end)')
+  nmerged=${merged%%$'\n'*}; merged_items=${merged#*$'\n'}; [ "$merged" != "$nmerged" ] || merged_items=""
+  # open PRs that fail a rule and are not just waiting for tests
+  open_items=$(jq -r -n --slurpfile recsf <(printf '%s' "$allrecs") --argjson rn "$RN" --argjson max 3 "$JQ_PLAIN"'
     $recsf[0] as $recs |
     def short: sub("^[a-z]+(\\([^)]*\\))?!?: *"; "") | sub(" *\\((T-[0-9]+|#[0-9]+)\\)$"; "") | .[0:60];
     def why3: (.reason | plain_reason) as $p
-      | if ($p | test("pending")) and (($p | test("fail|error|cancel"; "i")) | not) then "tests still running"
-        elif ($p | startswith("automated tests") or startswith("a required test")) then "tests failing"
-        else $p[0:70] end;
-    ($recs | map(select(.reason)) | sort_by([(.state != "OPEN"), -.number])) as $b
-    | ($b[0:$max] | map("• \(.title | short): \(why3)\(if .state == "MERGED" then " (already merged)" else "" end)\n  \(.url)") | join("\n"))
-      + (if ($b|length) > $max then "\n• +\(($b|length) - $max) more" else "" end)')
-  pending_only=0
-  [ "$nbad" -gt 0 ] && [ -n "$items" ] && ! grep -q -v -E '^  https|tests still running|^• \+' <<<"$items" && pending_only=1
-  mf=$(jq -r -n --slurpfile recsf <(printf '%s' "$allrecs") '$recsf[0] | map(select((.reason | not) and .state == "OPEN")) | .[0].url // empty')
-  mfirst=""; [ -z "$mf" ] || mfirst=" Merge first: $mf."
-  of="$ready of $total PRs ready to ship"
-  if [ ${#why[@]} -eq 0 ]; then
-    head="$proj: $of.$mfirst"; need="Nothing needed from you."
-  elif [ "$bad_local" = 1 ]; then
-    head="$proj: the daily check crashed on our side, so there is no verdict today."
-    need="You need to: ask a Claude session to fix the routine-verdict script."
-  elif [ "$bad_read" = 1 ]; then
-    head="$proj: the daily check could not read GitHub, so there is no verdict today."
-    need="You need to: ask a Claude session to re-run the $proj report."
-  elif [ "$crashed" = 1 ]; then
-    head="$proj: today's build did not run (${reasons:-reason unknown})."
-    need="You need to: ask a Claude session why the $proj build did not run."
-  elif [ "$RUN_OK" != 1 ] && [ "$stuck" = 1 ]; then
-    rt=$(resume_at)
-    head="$proj: the build is paused on the Claude usage limit${rt:+ and resumes ~$rt ${NOTIFY_TZ_LABEL:-UTC}}. $of so far."
-    need="Nothing needed from you. It restarts itself; you get a message if it cannot."
-  elif [ "$RUN_OK" != 1 ]; then
-    head="$proj: the build is still working. $of so far."; need="Nothing needed from you."
-  elif [ "$total" -eq 0 ] && [ "$qbad" != 1 ] && [ "$qsum" -eq 0 ]; then
-    head="$proj: nothing to build today, the task list is empty."; need="Nothing needed from you."
-  elif [ "$total" -eq 0 ]; then
-    head="$proj: the build finished but made no changes, although tasks are waiting."
-    need="You need to: ask a Claude session why the $proj build made no changes."
-  elif [ "$pending_only" = 1 ]; then
-    head="$proj: $of; $(plural "$nbad" PR) still waiting for tests.$mfirst"
-    need="Nothing needed from you now. If the tests fail, tomorrow's report says so."
+      | if ($p | startswith("automated tests") or startswith("a required test")) then "tests failing" else $p[0:70] end;
+    ($recs | map(select(.reason and .state == "OPEN" and ((.reason | plain_reason | test("pending")) | not))) | sort_by(-.number)) as $b
+    | ($b|length), ($b[0:$max][] | "• \(.title | short): \(why3)\n  \(.url)"),
+      (if ($b|length) > $max then "• +\(($b|length) - $max) more" else empty end)')
+  nopen=${open_items%%$'\n'*}; open_lines=${open_items#*$'\n'}; [ "$open_items" != "$nopen" ] || open_lines=""
+  need_lines="" nneed=0
+  if [ "$bad_local" = 1 ]; then need_lines+="• the daily check crashed on our side: ask a Claude session to fix the routine-verdict script."$'\n'; nneed=$((nneed + 1))
+  elif [ "$bad_read" = 1 ]; then need_lines+="• the daily check could not read GitHub: ask a Claude session to re-run the $proj report."$'\n'; nneed=$((nneed + 1)); fi
+  if [ "$crashed" = 1 ] || { [ "$norun" = 1 ] && { [ "$qbad" = 1 ] || [ "$qsum" -gt 0 ]; }; }; then
+    need_lines+="• the $proj build did not run (${reasons:-reason unknown}): ask a Claude session why."$'\n'; nneed=$((nneed + 1))
+  elif [ "$RUN_OK" = 1 ] && [ "$total" -eq 0 ] && [ "$qbad" != 1 ] && [ "$qsum" -gt 0 ]; then
+    need_lines+="• the build finished but made no changes, although $(plural "$qsum" task) waiting: ask a Claude session why."$'\n'; nneed=$((nneed + 1))
+  fi
+  if [ "$nopen" -gt 0 ]; then need_lines+="$open_lines"$'\n'; nneed=$((nneed + nopen)); fi
+  if [ "$nblocked" -gt 0 ]; then
+    need_lines+=$(jq -r '.[] | "• \(.task) \(.title // ""): \(.blocker // "no reason written")"' <<<"$BLOCKED")$'\n'; nneed=$((nneed + nblocked))
+  fi
+  if [ -n "$TRK_ERR" ]; then need_lines+="• $TRK_ERR."$'\n'; nneed=$((nneed + 1)); fi
+  need_lines=${need_lines%$'\n'}
+  # Fact 1
+  if [ "$RUN_OK" = 1 ]; then
+    fin="yes, ended ${RUN_END:-at an unknown time}${RUN_DUR:+, took $RUN_DUR}.${MEMTXT:+ Warning: $MEMTXT.}"
+  elif [ "$stuck" = 1 ]; then
+    fin="no, paused on the Claude usage limit; the hourly sweep restarts it."
   else
-    head="$proj: $of.$mfirst"; need="You need to: ask a Claude session to fix the PRs below."
+    fin="no, $(plain_why "${RUN_WHY:-unknown}" || echo "it has not finished")."
   fi
-  nbad_open=$(jq '[.[]|select(.reason and .state == "OPEN")]|length' <<<"$allrecs")
-  # Merged PRs that miss a rule are reported, not handed to the founder (2026-10-28: "fix api#197", already merged).
-  if [ "$need" = "You need to: ask a Claude session to fix the PRs below." ] && [ "$nbad_open" -eq 0 ]; then
-    need="Nothing needed from you: the PRs below are already merged; the next run checks them."
+  if [ "$norun" = 1 ] && [ "$total" -eq 0 ] && [ "$nmerged" -eq 0 ] && [ "$nneed" -eq 0 ]; then
+    msg="$proj: idle. No run, nothing merged, nothing blocked."
+  else
+    msg="$proj, $stamp"$'\n'"1. Finished: $fin"$'\n'
+    if [ "$nmerged" -gt 0 ]; then
+      msg+="2. Merged: $nmerged since the last report."$'\n'"$merged_items"
+      [ -z "${NOTE_OF[$grp]:-}" ] || msg+=$'\n'"${NOTE_OF[$grp]}"
+    else msg+="2. Merged: nothing."; fi
+    if [ "$nneed" -gt 0 ]; then msg+=$'\n'"3. Needs you: $nneed."$'\n'"$need_lines"; else msg+=$'\n'"3. Needs you: nothing."; fi
   fi
-  metrics_of "$grp"
-  msg="$head"$'\n'"$need"
-  [ -z "$MTXT" ] || msg+=$'\n'"$MTXT"
-  [ -z "$items" ] || msg+=$'\n\n'"$items"
-  [ "$qbad" = 1 ] || [ "$qsum" -eq 0 ] || msg+=$'\n'"• $(plural "$qsum" task) left in the queue."
   send "$msg"
   # Next verdict starts here. Written only after a real send, so a failed send re-judges the same window.
   if [ "${DRY_RUN:-0}" != 1 ] && [ "$rc" = 0 ] && [ -z "${ROUTINE_VERDICT_SINCE:-}" ]; then

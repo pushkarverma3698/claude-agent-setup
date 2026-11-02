@@ -3,8 +3,11 @@
   - claude-routine probe_verdict / probe_ok: what a one-word haiku answer means (bash 4+, GNU date: run on the VPS)
   - claude-routine live_run: a working run with a record under 45 min old must not be stopped
   - worktree-holds --clean: a squash-merged worktree is clean; a routine worktree under work/wt/ holds nothing
+  - routine-verdict: three facts per group (finished? merged + proof, needs you), idle prints idle, an all-PAUSED group is
+    skipped (bash 4+, GNU date, jq: run on the VPS or in CI; gh, systemctl, tracker, claude and claude-notify are fakes)
 """
 import datetime
+import json
 import importlib.machinery
 import importlib.util
 import os
@@ -26,6 +29,7 @@ def find(name):
 
 ROUTINE = find("claude-routine")
 HOLDS = find("worktree-holds")
+VERDICT = os.path.abspath(os.path.join(HERE, "..", "..", "routine-verdict"))
 
 
 def write(path, text, mode=None):
@@ -249,6 +253,144 @@ class WorktreeHolds(unittest.TestCase):
         holds = mod.worktree_holds(self.clone)
         self.assertNotIn("feat/t145-x", holds)
         self.assertIn("feat/t146-y", holds)
+
+
+@unittest.skipUnless(gnu_bash() and shutil.which("jq"), "needs bash 4+, GNU date and jq (the VPS, CI)")
+class VerdictThreeFacts(unittest.TestCase):
+    CONF = ("VERDICT=demo\nVERDICT_AT=17:30:00\nREPO=app\nPROFILE=p1\n"
+            "VERDICT_REPOS=(\"app|acme/app|main\")\nVERDICT_CHECKS=(\"acme/app|ci\")\nVERDICT_QUEUE='echo \"READY (0)\"'\n")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = self.d = self.tmp.name
+        self.defs, self.fake = f"{d}/defs", f"{d}/fake"
+        write(f"{self.defs}/routines.env", "AUTHOR=bot\nPROJ_demo=Demo\n")
+        iso = lambda m: (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.iso = iso
+        write(f"{self.fake}/gh", "#!/bin/sh\ncase \"$1 $2\" in\n 'pr list') cat \"$FAKE/prs.json\" ;;\n 'issue list') echo 0 ;;\n *) exit 1 ;;\nesac\n", 0o755)
+        write(f"{self.fake}/systemctl", "#!/bin/sh\ncase \"$*\" in\n *claude-routine@demo.service*) cat \"$FAKE/service.txt\" ;;\nesac\n", 0o755)
+        write(f"{self.fake}/notify", "#!/bin/sh\nprintf '%s\\n----\\n' \"$1\" >> \"$FAKE/sent.txt\"\necho sent\n", 0o755)
+        write(f"{self.fake}/tracker", "#!/bin/sh\necho \"$*\" >> \"$FAKE/tracker.log\"\n[ -f \"$FAKE/tracker.fail\" ] && exit 2\ncat \"$FAKE/tracker.json\"\n", 0o755)
+        write(f"{self.fake}/claude", "#!/bin/sh\ncat \"$FAKE/agents.json\"\n", 0o755)
+        write(f"{self.fake}/profile-env", f"claude={self.fake}/claude\nCLAUDE_CONFIG_DIR={self.fake}/cfg\n")
+        os.makedirs(f"{d}/work/app")
+        self.set_prs([])
+        self.set_service(ok=True)
+        self.set_session("done")
+        write(f"{self.fake}/tracker.json", json.dumps({"next": {"kind": "NONE"}, "changes": [], "blocked": []}))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def conf(self, extra="", name="demo"):
+        write(f"{self.defs}/{name}.conf", self.CONF + extra)
+
+    def set_prs(self, prs):
+        write(f"{self.fake}/prs.json", json.dumps(prs))
+
+    def set_service(self, ok=True, minutes_ago=60):
+        t = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=minutes_ago)).strftime("%a %Y-%m-%d %H:%M:%S UTC")
+        write(f"{self.fake}/service.txt", f"Result={'success' if ok else 'exit-code'}\nExecMainStatus={0 if ok else 1}\n"
+              f"ExecMainExitTimestamp={t}\nActiveState={'inactive' if ok else 'failed'}\n")
+
+    def set_session(self, state):
+        started = int((datetime.datetime.now().timestamp() - 4 * 3600) * 1000)
+        write(f"{self.fake}/agents.json", json.dumps([{"kind": "background", "name": "routine: demo 11-02", "state": state, "startedAt": started,
+                                                       "id": "abc", "sessionId": "sess", "cwd": "/w"}]))
+        write(f"{self.fake}/cfg/projects/-w/sess.jsonl",
+              json.dumps({"type": "assistant", "timestamp": self.iso(30), "message": {"content": []}}) + "\n")
+
+    def pr(self, number, title, state="MERGED", conclusion="SUCCESS"):
+        run = {"__typename": "CheckRun", "name": "ci", "workflowName": "test", "status": "COMPLETED", "conclusion": conclusion,
+               "startedAt": self.iso(200), "completedAt": self.iso(190)}
+        review = {"__typename": "StatusContext", "context": "routine/review", "state": "SUCCESS", "startedAt": self.iso(150)}
+        return {"number": number, "title": title, "url": f"https://github.com/acme/app/pull/{number}", "state": state,
+                "createdAt": self.iso(300), "mergedAt": self.iso(120) if state == "MERGED" else None, "isDraft": False,
+                "headRefName": f"feat/t{number}-x", "baseRefName": "main", "mergeStateStatus": "CLEAN", "headRefOid": "a" * 40,
+                "body": "## What changed\nx\n## How verified\ny\n## Not verified\nz\n", "statusCheckRollup": [run, review]}
+
+    def run_verdict(self, *args, dry=False):
+        env = dict(os.environ, PATH=self.fake + ":" + os.environ["PATH"], FAKE=self.fake, ROUTINE_VERDICT_DEFS=self.defs,
+                   ROUTINE_VERDICT_STATE=f"{self.d}/state", ROUTINE_VERDICT_NOTIFY=f"{self.fake}/notify",
+                   ROUTINE_VERDICT_TRACKER=f"{self.fake}/tracker", ROUTINE_VERDICT_WORK=f"{self.d}/work",
+                   ROUTINE_VERDICT_PROFILE_ENV=f"{self.fake}/profile-env")
+        if dry:
+            env["DRY_RUN"] = "1"
+        r = subprocess.run([VERDICT, *args], capture_output=True, text=True, env=env)
+        sent = f"{self.fake}/sent.txt"
+        return r, (open(sent).read() if os.path.exists(sent) else "")
+
+    def test_finished_merged_and_blocked(self):
+        self.conf("TRACKER_REPO=acme/tracker\nVERDICT_NOTE='Tests green and merged, not deployed.'\n")
+        self.set_prs([self.pr(7, "feat: add widget")])
+        write(f"{self.fake}/tracker.json", json.dumps({"next": {"kind": "NONE"}, "changes": [], "blocked": [
+            {"task": "T-002", "title": "Pick a provider", "status": "Blocked", "blocker": "needs founder: choose a provider"}]}))
+        r, sent = self.run_verdict()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertRegex(sent, r"1\. Finished: yes, ended \d\d:\d\d UTC")
+        self.assertIn("2. Merged: 1", sent)
+        self.assertIn("add widget: ci success", sent)  # the "feat:" prefix is dropped
+        self.assertIn("ci success", sent)
+        self.assertIn("https://github.com/acme/app/pull/7", sent)
+        self.assertIn("Tests green and merged, not deployed.", sent)
+        self.assertIn("3. Needs you: 1", sent)
+        self.assertIn("T-002", sent)
+        self.assertIn("choose a provider", sent)
+        self.assertNotRegex(sent, r"\bNO\b")
+        self.assertIn("next --json", open(f"{self.fake}/tracker.log").read())
+        self.assertIn("--conf", open(f"{self.fake}/tracker.log").read())
+
+    def test_idle_group_prints_one_idle_line(self):
+        self.conf()
+        self.set_service(ok=True, minutes_ago=60 * 40)  # last run is older than the window
+        r, sent = self.run_verdict()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        body = sent.split("\n----")[0].strip()
+        self.assertEqual(len(body.splitlines()), 1, body)
+        self.assertIn("idle", body.lower())
+        self.assertNotRegex(body, r"\bNO\b")
+
+    def test_all_paused_group_is_skipped(self):
+        self.conf("PAUSED=1\n")
+        r, sent = self.run_verdict()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(sent, "")
+        self.assertIn("paused", r.stdout + r.stderr)
+        self.assertFalse(os.path.exists(f"{self.d}/state/demo"))
+
+    def test_note_is_absent_without_the_field_or_without_merges(self):
+        self.conf()
+        self.set_prs([self.pr(7, "feat: add widget")])
+        _, sent = self.run_verdict()
+        self.assertIn("2. Merged: 1", sent)
+        self.assertNotIn("not deployed", sent)
+
+    def test_crashed_run_says_not_finished_and_asks_for_help(self):
+        self.conf()
+        self.set_service(ok=False)
+        _, sent = self.run_verdict()
+        self.assertRegex(sent, r"1\. Finished: no")
+        self.assertNotIn("Finished: yes", sent)
+        self.assertRegex(sent, r"3\. Needs you: [1-9]")
+
+    def test_stopped_session_is_paused_not_dead(self):
+        self.conf()
+        self.set_session("blocked")
+        _, sent = self.run_verdict()
+        self.assertIn("1. Finished: no, paused on the Claude usage limit", sent)
+
+    def test_unreadable_tracker_is_a_needs_you_item_not_silence(self):
+        self.conf("TRACKER_REPO=acme/tracker\n")
+        write(f"{self.fake}/tracker.fail", "")
+        _, sent = self.run_verdict()
+        self.assertRegex(sent, r"3\. Needs you: [1-9]")
+        self.assertIn("tracker", sent.lower())
+
+    def test_dry_run_prints_instead_of_sending(self):
+        self.conf()
+        r, sent = self.run_verdict(dry=True)
+        self.assertEqual(sent, "")
+        self.assertIn("1. Finished", r.stdout)
 
 
 if __name__ == "__main__":
