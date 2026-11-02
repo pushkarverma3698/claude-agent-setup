@@ -17,6 +17,7 @@ Each conf may set
   builder  an older builder-prompt phrase, group 1 = task id, accepted besides `task <owner/repo>#<id>`
   closes   issue: a PR body closing #N must come from a branch= head with task id N
 Fields are `key=value` split on `|`, so a regex cannot contain `|`.
+A conf that sets CODE_REPO (a tracker routine) must have a GUARD_REPOS entry for that repo in some conf, or this exits 1.
 
   routine-policy             print the JSON (exit 1 with the reason on a bad line)
   routine-policy --install   write it to the laptop hook dir and to $AGENT_RULES_HOST (both files)
@@ -50,12 +51,14 @@ KEYS = {"bases", "status", "runner", "task", "format", "branch", "from", "builde
 
 
 def conf_lines(path):
-    """GUARD_REPOS entries of one conf, read the way claude-routine reads it (bash source)."""
-    out = subprocess.run(["bash", "-c", 'source "$1" >/dev/null && for x in "${GUARD_REPOS[@]}"; do printf "%s\\0" "$x"; done',
-                          "_", path], capture_output=True, text=True, timeout=10)
+    """(CODE_REPO, GUARD_REPOS entries) of one conf, read the way claude-routine reads it (bash source)."""
+    out = subprocess.run(["bash", "-c", 'source "$1" >/dev/null && printf "%s\\0" "${CODE_REPO:-}" && '
+                          'for x in "${GUARD_REPOS[@]}"; do printf "%s\\0" "$x"; done', "_", path],
+                         capture_output=True, text=True, timeout=10)
     if out.returncode:
         sys.exit(f"routine-policy: {path} does not source: {out.stderr.strip()}")
-    return [x for x in out.stdout.split("\0") if x]
+    code, *lines = out.stdout.split("\0")
+    return code, [x for x in lines if x]
 
 
 def parse(line, where):
@@ -95,13 +98,21 @@ def parse(line, where):
 def build():
     if not CONFS or not os.path.isdir(CONFS):
         sys.exit("routine-policy: no conf folder: set ROUTINE_CONF_DIR or AGENT_OVERLAY_DIR")
-    repos, seen = {}, {}
+    repos, seen, code = {}, {}, {}
     for conf in sorted(glob.glob(os.path.join(CONFS, "*.conf"))):
-        for line in conf_lines(conf):
+        repo_of_tracker, lines = conf_lines(conf)
+        if repo_of_tracker:
+            code[repo_of_tracker] = os.path.basename(conf)
+        for line in lines:
             repo, p = parse(line, os.path.basename(conf))
             if repo in repos:
                 sys.exit(f"routine-policy: {repo} is in both {seen[repo]} and {os.path.basename(conf)}")
             repos[repo], seen[repo] = p, os.path.basename(conf)
+    # A tracker routine's code repo with no guard rules would run unguarded on the laptop and the VPS: refuse it.
+    for repo, conf in sorted(code.items()):
+        if repo not in repos:
+            sys.exit(f"routine-policy: {conf} has CODE_REPO={repo} but no conf has a GUARD_REPOS entry for it "
+                     f"(add GUARD_REPOS=('{repo}|bases=<base>|branch=^feat/t(\\d+)-') to {conf})")
     return {"repos": repos}
 
 

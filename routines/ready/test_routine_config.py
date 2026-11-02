@@ -4,7 +4,9 @@
     stays one line, garbage is refused
   - claude-routine slot_busy: a timer slot that fires while the lead is working prints one line and skips (bash 4+, GNU date)
   - routine-new on an EMPTY code repo with a fake gh/ssh: first commit, integration branch, private tracker repo seeded,
-    protection, conf with routine + tracker keys, no GitHub labels
+    protection, conf with routine + tracker keys, no GitHub labels, guard policy installed and checked, steps left listed
+  - routine-new --dry-run writes nothing and prints every action; refused protection stops unless --allow-unprotected
+  - routine-policy refuses a tracker conf (CODE_REPO) whose repo has no GUARD_REPOS entry
 No network: gh, ssh and systemd-analyze are fakes on PATH.
 """
 import base64
@@ -248,6 +250,8 @@ if a[0] == "api":
         out(str(len(R["branches"])))
     if rest.startswith("branches/") and rest.endswith("/protection"):
         b = rest[len("branches/"):-len("/protection")]
+        if R.get("free_private"):  # GitHub's answer for a private repo on a free plan, to the read and the write
+            fail("gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)")
         if method == "PUT":
             R.setdefault("protection", {})[b] = json.loads(sys.stdin.read()); out()
         if b in R.get("protection", {}): out("{}")
@@ -313,7 +317,8 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         os.makedirs(self.confs)
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_STATE=self.state, FAKE_SSH_LOG=f"{d}/ssh.log",
                         FAKE_JOB_OUT=f"{d}/job.md", FAKE_TRACKER_LOG=f"{d}/tracker.log", TRACKER_BIN=f"{self.bin}/tracker",
-                        AGENT_RULES_HOST="vps-test", AGENT_SETUP_ENV=f"{d}/none", ROUTINE_CONF_DIR=self.confs)
+                        AGENT_RULES_HOST="vps-test", AGENT_SETUP_ENV=f"{d}/none", ROUTINE_CONF_DIR=self.confs,
+                        HOME=f"{d}/home")  # routine-policy --install writes $HOME/.claude/hooks
         self.env.pop("AGENT_OVERLAY_DIR", None)
 
     def tearDown(self):
@@ -363,6 +368,50 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         self.assertTrue(tl[-1].startswith(f"next --project shop-daily --conf {self.confs}/shop-daily.conf"), tl)
         self.assertIn("NEXT NEW T-1", r.stdout)
         self.assertIn("Done.", r.stdout)
+        # --no-deploy still installs the guard policy, and the repo is in it
+        pol = json.loads(read(f"{self.d}/home/.claude/hooks/routine-policy.json"))
+        self.assertEqual(pol["repos"]["acme/shop"], {"bases": ["beta"], "branch": r"^feat/t(\d+)-"})
+        self.assertIn("/opt/agent-rules/hooks/routine-policy.json", read(f"{self.d}/ssh.log"))
+        self.assertIn("guard policy lists acme/shop on the laptop and on vps-test", r.stdout)
+        # exactly two steps left: the job contract and the tracker rows
+        self.assertIn("== left for you (2)", r.stdout)
+        self.assertIn("https://github.com/acme/shop-tracker/edit/main/backlog.csv", r.stdout)
+
+    def test_dry_run_writes_nothing_and_prints_every_action(self):
+        r = self.new("acme/shop", "beta", "03:04", "--dry-run")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        writes = [c for c in self.st()["calls"] if "-X PUT" in c or "-X POST" in c or c.startswith("repo create")]
+        self.assertEqual(writes, [])
+        self.assertEqual(os.listdir(self.confs), [])
+        self.assertFalse(os.path.exists(f"{self.d}/job.md"))
+        self.assertFalse(os.path.exists(f"{self.d}/tracker.log"))
+        self.assertFalse(os.path.exists(f"{self.d}/home/.claude/hooks/routine-policy.json"))
+        for want in ("would: create the first commit", "would: create branch beta", "would: create the PRIVATE repo acme/shop-tracker",
+                     "would: seed acme/shop-tracker/backlog.csv", "would: PUT branch protection on beta",
+                     "would: run tracker migrate", "would: write vps-test:/home/claude-agent/agent-jobs/shop-daily.md",
+                     "would: run setup-claude-routines", r"| GUARD_REPOS=('acme/shop|bases=beta|branch=^feat/t(\d+)-')",
+                     "guard policy with shop-daily.conf: acme/shop", "== left for you (2)", "0 check(s) would stop"):
+            self.assertIn(want, r.stdout)
+
+    def test_dry_run_on_a_missing_repo_lists_the_stops_and_exits_1(self):
+        r = self.new("acme/nope", "beta", "03:04", "--dry-run")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("WOULD STOP: gh here cannot read acme/nope", r.stdout)
+        self.assertIn("would: protect beta in acme/nope", r.stdout)
+        self.assertIn("== left for you (2)", r.stdout)
+        self.assertEqual(os.listdir(self.confs), [])
+
+    def test_refused_protection_stops_before_any_conf(self):
+        s = self.st(); s["repos"]["acme/shop"]["free_private"] = True; write(self.state, json.dumps(s))
+        r = self.new("acme/shop", "beta", "03:04", "--no-deploy")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("is NOT protected (gh: Upgrade to GitHub Pro", r.stderr)
+        self.assertIn("--allow-unprotected", r.stderr)
+        self.assertEqual(os.listdir(self.confs), [])
+        r = self.new("acme/shop", "beta", "03:04", "--no-deploy", "--allow-unprotected")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("== left for you (3)", r.stdout)
+        self.assertIn("beta of acme/shop has no branch protection", r.stdout)
 
     def test_second_run_refuses_to_overwrite(self):
         self.assertEqual(self.new("acme/shop", "beta", "03:04", "--no-deploy").returncode, 0)
@@ -403,6 +452,25 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         # 21:30 IST = 16:00 UTC, +6 h = 22:00 UTC
         self.assertIn("VERDICT_AT=22:00:00", self.conf("shop"))
+
+
+class RoutinePolicyCoverage(unittest.TestCase):
+    def policy(self, files):
+        with tempfile.TemporaryDirectory() as d:
+            for n, t in files.items():
+                write(f"{d}/{n}", t)
+            env = dict(os.environ, ROUTINE_CONF_DIR=d, AGENT_SETUP_ENV=f"{d}/none")
+            return subprocess.run([os.path.join(ROOT, "routine-policy")], capture_output=True, text=True, env=env)
+
+    def test_tracker_repo_without_guard_rules_is_refused(self):
+        r = self.policy({"a.conf": "CODE_REPO=acme/x\n"})
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("CODE_REPO=acme/x but no conf has a GUARD_REPOS entry", r.stderr)
+
+    def test_guard_rules_in_another_conf_cover_it(self):
+        r = self.policy({"a.conf": "CODE_REPO=acme/x\n", "b.conf": "GUARD_REPOS=('acme/x|bases=beta')\n"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["repos"]["acme/x"], {"bases": ["beta"]})
 
 
 if __name__ == "__main__":
