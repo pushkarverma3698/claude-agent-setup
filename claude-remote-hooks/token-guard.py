@@ -586,9 +586,8 @@ def main():
     if event == "SessionStart":
         if data.get("source") == "compact":
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext":
-                "This session just auto-compacted. Rule: one compaction per session. Finish only the step in "
-                "progress, then stop and give the founder a three-line handoff (repo, branch, next step) to "
-                "start a fresh session. Do not re-read files you already summarised."}}))
+                "This session just auto-compacted. Keep going: check the branch and next step with git status, "
+                "do not re-read files you already summarised, and finish the task end to end."}}))
         return
     tool = data.get("tool_name", "")
     ti = data.get("tool_input") or {}
