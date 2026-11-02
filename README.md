@@ -44,9 +44,12 @@ ID_RE='T-\d+'
 LEASE_HOURS=6
 MAX_BUILDERS=3                 # new claims stop while this many rows are held; 0 = no cap
 NOTIFY_CMD=claude-notify       # gets the message on stdin
+ISSUE_IMPORT=1                 # optional: `tracker sync` mirrors GitHub issues (rows `#N`); see ISSUE_REPO, ISSUE_STATUS below
 ```
 
 The tool adds eight columns (Holder, Environment, Run, Branch, PR, Blocker, Next step, Updated); `tracker migrate` appends them in one commit, and write commands refuse to run until they exist.
+
+With `ISSUE_IMPORT=1`, `sync` also imports the open issues of `ISSUE_REPO` (default `CODE_REPO`) in the same write: a new issue becomes a row `#N` with a status from `ISSUE_STATUS` (default `agent:blocked=Blocked,agent:ready=Not started,agent:working=Not started,*=Waiting`, first matching label in map order wins); a closed issue makes its row Done; labels only change rows with no holder in Not started, Waiting or Blocked; the dependency column (`DEPS_COL`) and `BLOCK_COL` (default `Blocked by`, needs that column) hold only the still-open blockers from the issue's "Blocked by" line (same-repo as `#N`, other repos as `owner/repo#N`). `next` skips a row whose `BLOCK_COL` is non-empty and says why. Blockers GitHub does not list (pull requests, over 1000 issues) stay until removed from the issue.
 
 Commands: `sync`, `next`, `claim T-NNN`, `beat T-NNN`, `block T-NNN "text" --needs founder|stakeholder`, `done T-NNN --pr N`, `release T-NNN`, `check`, `migrate`. A row is held while it is active, has a holder and was updated less than `LEASE_HOURS` ago. An active row past that, or with no holder, is a leftover and must be resumed before new work. Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder, 6 at builder cap. `claim` of a new task exits 6 while `MAX_BUILDERS` rows are held (default 3); leftovers are never capped, and `next` then prints `NEXT NONE` plus an `AT CAP` line. `check` is for push hooks: it exits 5 when another holder took the row over.
 
