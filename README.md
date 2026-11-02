@@ -42,12 +42,13 @@ WORK_BASE=main                 # branch new work is cut from
 BRANCH_FMT='feat/t{num}-{slug}'
 ID_RE='T-\d+'
 LEASE_HOURS=6
+MAX_BUILDERS=3                 # new claims stop while this many rows are held; 0 = no cap
 NOTIFY_CMD=claude-notify       # gets the message on stdin
 ```
 
 The tool adds eight columns (Holder, Environment, Run, Branch, PR, Blocker, Next step, Updated); `tracker migrate` appends them in one commit, and write commands refuse to run until they exist.
 
-Commands: `sync`, `next`, `claim T-NNN`, `beat T-NNN`, `block T-NNN "text" --needs founder|stakeholder`, `done T-NNN --pr N`, `release T-NNN`, `check`, `migrate`. A row is held while it is active, has a holder and was updated less than `LEASE_HOURS` ago. An active row past that, or with no holder, is a leftover and must be resumed before new work. Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder. `check` is for push hooks: it exits 5 when another holder took the row over.
+Commands: `sync`, `next`, `claim T-NNN`, `beat T-NNN`, `block T-NNN "text" --needs founder|stakeholder`, `done T-NNN --pr N`, `release T-NNN`, `check`, `migrate`. A row is held while it is active, has a holder and was updated less than `LEASE_HOURS` ago. An active row past that, or with no holder, is a leftover and must be resumed before new work. Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder, 6 at builder cap. `claim` of a new task exits 6 while `MAX_BUILDERS` rows are held (default 3); leftovers are never capped, and `next` then prints `NEXT NONE` plus an `AT CAP` line. `check` is for push hooks: it exits 5 when another holder took the row over.
 
 ## License
 

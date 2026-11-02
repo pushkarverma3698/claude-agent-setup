@@ -13,7 +13,8 @@ byte-for-byte except the rows a command changed. Config is <project>.conf (a bas
 A row is HELD while it is active, has a holder and was updated less than LEASE_HOURS ago; an active row past that, or with
 no holder, is a LEFTOVER and must be taken (claim --resume) before any new task. Claiming also writes <git dir>/tracker-claim
 in the worktree, which `check` (push hooks) reads to stop a session whose row someone else took over.
-Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder.
+MAX_BUILDERS (default 3, 0 = no cap) stops a NEW claim while that many rows are held; leftovers are never capped.
+Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder, 6 at builder cap.
 """
 import argparse, base64, csv, datetime as dt, io, json, math, os, random, re, secrets, shlex, shutil, socket, subprocess, sys, time
 import urllib.parse
@@ -59,7 +60,7 @@ def repo_of_url(url):
 
 KEYS = ["TRACKER_REPO", "TRACKER_PATH", "TRACKER_BRANCH", "CODE_REPO", "REPO_DIR", "WORK_BASE", "WORKTREE_ROOT", "BRANCH_FMT",
         "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE",
-        "LEASE_HOURS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
+        "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
 
 
 def load_conf(args, project_hint=""):
@@ -86,7 +87,7 @@ def load_conf(args, project_hint=""):
         if k not in c:
             raise Fail(2, f"{path}: {k} is not set")
     d = {"TRACKER_BRANCH": "main", "BRANCH_FMT": "feat/t{num}-{slug}", "ID_COL": "Task ID", "ID_RE": r"T-\d+", "TITLE_COL": "Title",
-         "STATUS_COL": "Status", "DEPS_COL": "Depends on", "ORDER_COLS": "Milestone", "LEASE_HOURS": "6", "NOTIFY_CMD": "claude-notify"}
+         "STATUS_COL": "Status", "DEPS_COL": "Depends on", "ORDER_COLS": "Milestone", "LEASE_HOURS": "6", "MAX_BUILDERS": "3", "NOTIFY_CMD": "claude-notify"}
     for k, v in d.items():
         c.setdefault(k, v)
     name = c["CODE_REPO"].split("/")[-1]
@@ -94,6 +95,10 @@ def load_conf(args, project_hint=""):
     if c["REPO_DIR"]:
         c.setdefault("WORKTREE_ROOT", os.path.join(c["REPO_DIR"], ".claude", "worktrees"))
     c["cols"] = {a: c.get("COL_" + a.upper().replace(" ", "_"), a) for a in AGENT_COLS} | {"Status": c["STATUS_COL"]}
+    try:
+        c["cap"] = max(0, int(c["MAX_BUILDERS"]))
+    except ValueError:
+        raise Fail(2, f"{path}: MAX_BUILDERS must be a whole number")
     c["lease"] = dt.timedelta(hours=float(c["LEASE_HOURS"]))
     return c
 
@@ -407,7 +412,7 @@ def apply_sync(t, prs):
             rec = t.find(task)
             if rec is not None and t.status(rec) != "Done":
                 changes.append(f"{task} {t.status(rec)} -> Done (#{n} Closes)")
-                t.setmany(rec, Status="Done", PR=f"#{n}", Updated=stamp(at))
+                t.setmany(rec, Status="Done", PR=f"#{n}", Updated=stamp(at), **{"Next step": "", "Blocker": ""})
         for task in part:
             rec = t.find(task)
             if rec is not None and t.status(rec) == "Not started":
@@ -464,6 +469,12 @@ def describe(t, kind, rec):
     return d
 
 
+def at_cap(t, cfg):
+    """Task ids of the held rows when they already fill MAX_BUILDERS (2026-10: five builders at once, the reaper killed live test runs)."""
+    held = [t.get(r, cfg["ID_COL"]) for r in t.rows() if t.state(r) == "held"]
+    return held if cfg["cap"] and len(held) >= cfg["cap"] else []
+
+
 def cmd_next(cfg, a):
     prs = merged_prs(cfg)
     heads = {p["headRefName"] for p in prs}
@@ -485,11 +496,16 @@ def cmd_next(cfg, a):
     pick = (("LEFTOVER", groups["leftover"]) if groups["leftover"] else ("NEW", groups["new"]))
     first = pick[1][0] if pick[1] else None
     nxt = {"kind": pick[0], "task": t.get(first, cfg["ID_COL"])} if first is not None else {"kind": "NONE"}
+    capped = at_cap(t, cfg) if pick[0] == "NEW" and first is not None else []
+    if capped:  # the routine reads NEXT NONE as "stop starting tasks", which is the clean end of a run
+        nxt = {"kind": "NONE", "reason": "builder cap", "cap": cfg["cap"], "held": capped}
     d = {k: [describe(t, k, r) for r in recs] for k, recs in groups.items()}
     if a.json:
         print(json.dumps({"next": nxt, "changes": changes, **d}, indent=1))
         return
     print(f"NEXT {nxt['kind']} {nxt.get('task', '')}".strip())
+    if capped:
+        print(f"AT CAP {len(capped)} of {cfg['cap']} builders: {', '.join(capped)}")
     for x in d["leftover"]:
         print(f"LEFTOVER {x['task']} | {x['title']} | {x['branch']} | {x['pr']} | {x['next_step']} | stale since {x['stale_since'] or 'unknown'}")
     for x in d["held"]:
@@ -531,6 +547,9 @@ def cmd_claim(cfg, a):
     leftovers = [t.get(r, idc) for r in t.rows() if t.state(r) == "leftover"]
     if st == "new" and leftovers:
         raise Fail(4, f"leftover first: {', '.join(leftovers)}")
+    capped = at_cap(t, cfg) if st == "new" else []
+    if capped:
+        raise Fail(6, f"at builder cap ({len(capped)} of {cfg['cap']}): held {', '.join(capped)}")
     if not cfg.get("REPO_DIR"):
         raise Fail(2, "REPO_DIR is not set and no clone found in ~/work or ~/Projects")
     cb, repo = claim_branch_bin(), cfg["CODE_REPO"]

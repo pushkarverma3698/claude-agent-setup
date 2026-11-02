@@ -471,6 +471,64 @@ class Behaviour(Sandbox):
         self.assertEqual((got["Status"], got["Holder"], got["Branch"], got["Updated"]), ("Building", "", "feat/t102-beta", ""))
         self.assertIn("LEFTOVER T-102", self.tracker("next", who="B").stdout)
 
+    def held_rows(self, n):
+        return [row(f"T-{200 + i}", status="Building", Holder="x:y:z", Branch=f"feat/t{200 + i}-held", Updated=ago(1)) for i in range(n)]
+
+    def test_16_builder_cap_refuses_new_claim_with_exit_6(self):
+        # 2026-10: up to five builders on one project, the memory reaper killed live eslint/tsc/vitest jobs 6-27 times a day
+        self.conf_extra = "MAX_BUILDERS=2\n"
+        self.write_conf()
+        self.put(self.held_rows(2) + [row("T-101", "Fresh")])
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 6, r.stderr)
+        self.assertIn("T-200", r.stderr)
+        self.assertIn("T-201", r.stderr)
+        self.assertEqual(self.log("cb.log"), "")
+        self.put(self.held_rows(1) + [row("T-101", "Fresh")])  # one below the cap: allowed
+        self.assertEqual(self.tracker("claim", "T-101").returncode, 0)
+
+    def test_16b_default_cap_is_three(self):
+        self.put(self.held_rows(3) + [row("T-101", "Fresh")])
+        self.assertEqual(self.tracker("claim", "T-101").returncode, 6)
+
+    def test_16c_leftover_is_claimable_at_cap(self):
+        self.conf_extra = "MAX_BUILDERS=1\n"
+        self.write_conf()
+        self.branch_on_remote("feat/t101-thing", 9)
+        self.put(self.held_rows(1) + [row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(9))])
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_16d_zero_means_no_cap(self):
+        self.conf_extra = "MAX_BUILDERS=0\n"
+        self.write_conf()
+        self.put(self.held_rows(6) + [row("T-101", "Fresh")])
+        self.assertEqual(self.tracker("claim", "T-101").returncode, 0)
+
+    def test_16e_next_at_cap_offers_no_new_task_but_still_offers_leftover(self):
+        self.conf_extra = "MAX_BUILDERS=2\n"
+        self.write_conf()
+        self.put(self.held_rows(2) + [row("T-101", "Fresh")])
+        r = self.tracker("next")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "NEXT NONE")
+        self.assertIn("AT CAP 2 of 2 builders: T-200, T-201", r.stdout)
+        js = json.loads(self.tracker("next", "--json").stdout)
+        self.assertEqual(js["next"], {"kind": "NONE", "reason": "builder cap", "cap": 2, "held": ["T-200", "T-201"]})
+        self.branch_on_remote("feat/t102-old", 9)
+        self.put(self.held_rows(2) + [row("T-101", "Fresh"), row("T-102", status="Building", Holder="x:y:z", Branch="feat/t102-old", Updated=ago(9))])
+        self.assertEqual(self.tracker("next").stdout.splitlines()[0], "NEXT LEFTOVER T-102")
+
+    def test_17_closes_clears_next_step_and_blocker(self):
+        # a Done row kept the "Left: ..." text of an earlier Part-of PR and still read like work was left
+        writef(os.path.join(self.fake, "prs.json"), json.dumps([{"number": 12, "headRefName": "feat/t101-thing", "mergedAt": "2026-10-30T10:15:42Z",
+                                                                  "body": "Closes T-101\n"}]))
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(1), PR="#5",
+                      **{"Next step": "SV1-SV4", "Blocker": "waiting on X"})])
+        self.assertEqual(self.tracker("sync").returncode, 0)
+        got = self.rows()["T-101"]
+        self.assertEqual((got["Status"], got["PR"], got["Next step"], got["Blocker"]), ("Done", "#12", "", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
