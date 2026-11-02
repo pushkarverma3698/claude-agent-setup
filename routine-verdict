@@ -7,8 +7,7 @@
 #   3. Needs you   open PRs that fail a rule, a run that crashed or a check that could not read GitHub, and, when the
 #                  conf sets TRACKER_REPO, the tracker rows with Status Blocked (`tracker next --json`)
 # A group with no run, nothing merged, nothing blocked and an empty queue prints one "idle" line. A group whose routine
-# has PAUSED=1 is skipped. A run that is paused on a usage limit says "resumes ~HH:MM in NOTIFY_TZ" (next tick of
-# claude-routine-resume.timer).
+# has PAUSED=1 is skipped. A run that is paused on a usage limit says so; routine-sweep.timer restarts it.
 # The readiness rules below are unchanged; only the text is plain. The journal line keeps PROD-READY n/m. No model is involved:
 # every line comes from the GitHub API, systemd or a command result. Runs on the VPS as claude-agent
 # (routine-verdict@<group>.timer at the conf's VERDICT_AT, e.g. 17:30 UTC). Installed by
@@ -257,10 +256,6 @@ tracker_blocked() { # group
   BLOCKED="[]" TRK_ERR="the task tracker (${TRACKER_OF[$1]}) could not be read, so blocked tasks are unknown"
 }
 
-resume_at() { # next tick of the resume timer as HH:MM in NOTIFY_TZ, empty when unknown
-  local t; t=$(systemctl show -p NextElapseUSecRealtime --value claude-routine-resume.timer 2>/dev/null)
-  [ -n "$t" ] && TZ=${NOTIFY_TZ:-UTC} date -d "$t" +%H:%M 2>/dev/null || true
-}
 send() { # send <text>; sets rc=1 unless claude-notify answers sent
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '%s\n----\n' "$1"; return; fi
   local out; out=$("$NOTIFY" "$1" 2>&1); printf '%s\n' "$out"
@@ -413,8 +408,7 @@ for grp in "${GRPS[@]}"; do
   if [ "$RUN_OK" = 1 ]; then
     fin="yes, ended ${RUN_END:-at an unknown time}${RUN_DUR:+, took $RUN_DUR}.${MEMTXT:+ Warning: $MEMTXT.}"
   elif [ "$stuck" = 1 ]; then
-    rt=$(resume_at)
-    fin="no, paused on the Claude usage limit${rt:+; resumes ~$rt ${NOTIFY_TZ_LABEL:-UTC}}."
+    fin="no, paused on the Claude usage limit; the hourly sweep restarts it."
   else
     fin="no, $(plain_why "${RUN_WHY:-unknown}" || echo "it has not finished")."
   fi

@@ -373,6 +373,12 @@ class VerdictThreeFacts(unittest.TestCase):
         self.assertNotIn("Finished: yes", sent)
         self.assertRegex(sent, r"3\. Needs you: [1-9]")
 
+    def test_stopped_session_is_paused_not_dead(self):
+        self.conf()
+        self.set_session("blocked")
+        _, sent = self.run_verdict()
+        self.assertIn("1. Finished: no, paused on the Claude usage limit", sent)
+
     def test_unreadable_tracker_is_a_needs_you_item_not_silence(self):
         self.conf("TRACKER_REPO=acme/tracker\n")
         write(f"{self.fake}/tracker.fail", "")
