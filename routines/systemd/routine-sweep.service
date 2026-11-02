@@ -1,7 +1,7 @@
 # Written by setup-claude-routines on the founder's laptop; edit it there.
-# Wakes routine runs that stopped on "You've hit your … limit" once their account has usage again.
+# Reads each routine's tracker: restarts a lead for leftover rows, reports dead runs and blocked rows (routines/bin/routine-sweep).
 [Unit]
-Description=Resume Claude routine runs stopped on the usage limit
+Description=Sweep Claude routines for leftover tracker rows, dead runs and blocked rows
 After=network-online.target claude-bgd@main.service claude-bgd@alt.service claude-bgd@alt2.service
 
 [Service]
@@ -9,5 +9,5 @@ Type=oneshot
 Slice=claude.slice
 User=claude-agent
 Environment=HOME=/home/claude-agent
-ExecStart=/usr/local/bin/claude-routine --resume-stopped
+ExecStart=/usr/local/bin/routine-sweep
 TimeoutStartSec=20min

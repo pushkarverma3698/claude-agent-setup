@@ -1,9 +1,10 @@
 # Written by setup-claude-routines on the founder's laptop; edit it there.
 [Unit]
-Description=Hourly check for Claude routine runs stopped on the usage limit
+Description=Hourly sweep of Claude routines (leftover rows, dead runs, blocked rows)
 
 [Timer]
 OnCalendar=*-*-* *:17:00
+Persistent=true
 
 [Install]
 WantedBy=timers.target
