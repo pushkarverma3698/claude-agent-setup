@@ -19,7 +19,7 @@ run() { # run <expect: deny|allow|wrap|ctx> <json>
     deny) [ $rc -eq 2 ] ;;
     allow) [ $rc -eq 0 ] && [ -z "$out" ] ;;
     wrap) [ $rc -eq 0 ] && grep -q 'merge refused' <<<"$out" ;;
-    ctx) [ $rc -eq 0 ] && grep -q 'auto-compacted' <<<"$out" ;;
+    ctx) [ $rc -eq 0 ] && grep -q 'Keep going' <<<"$out" && ! grep -qi 'stop' <<<"$out" ;;
   esac && echo "ok   $1  $3" || { echo "FAIL $1  $3 (rc=$rc)"; fail=1; }
 }
 b() { printf '{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"%s","tool_input":{"command":%s}}' "$T" "$(jq -Rn --arg c "$1" '$c')"; }
