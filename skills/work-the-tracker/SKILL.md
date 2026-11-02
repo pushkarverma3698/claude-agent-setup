@@ -9,7 +9,7 @@ The tracker (a CSV in its own repo, driven by the `tracker` tool) is the only re
 
 1. `tracker next`. Output starts `NEXT LEFTOVER|NEW T-12`, or `NEXT NONE` (nothing to do: say so and stop).
    Leftovers (stale work nobody holds) always come before new tasks. HELD rows are someone else's; skip them.
-2. `tracker claim T-12`. It makes the branch and worktree and prints `CLAIMED T-12 branch=… worktree=… holder=…`. Work only in that worktree.
+2. `tracker claim T-12`. It makes the branch and worktree and prints `CLAIMED T-12 branch <b> claim <sha> worktree=… holder=…`. Work only in that worktree.
    - exit 3: someone holds it. Run `tracker next` again and take what it names.
    - exit 4: a leftover comes first. Claim the leftover the message names instead.
    - exit 2: config or API error, or the row is Done, Blocked or not ready. Read the message.
