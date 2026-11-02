@@ -4,7 +4,7 @@ Hooks, routines and helper scripts for running Claude Code (and other coding age
 
 ## What is here
 
-- `token-guard.py`: PreToolUse/SessionStart hook. On the VPS it runs in full mode; on a laptop it runs with `--pr-only`, where it checks PR bases, PR bodies and merge targets. It reads per-repo rules from `routine-policy.defaults.json`, overlaid by `routine-policy.json`. Tests: `./test-token-guard.sh`.
+- `token-guard.py`: PreToolUse/SessionStart hook. On the VPS it runs in full mode; on a laptop it runs with `--pr-only`, where it checks PR bases, PR bodies and merge targets. Before every non-delete `git push`, in any repo, it runs `tracker check` in the push dir and refuses the push when the session was taken over (exit 5) or the check fails or times out (fail closed); it skips this when `tracker` is not installed. It reads per-repo rules from `routine-policy.defaults.json`, overlaid by `routine-policy.json`. Tests: `./test-token-guard.sh`.
 - `routine-policy`: builds those rules from the `GUARD_REPOS` lines in your routine confs. `--install` writes them to the laptop and the VPS.
 - `setup-claude-routines`, `routine-new`, `routine-verdict`, `routines/`: daily VPS routines driven by systemd timers, with a verdict message afterwards.
 - `session-brief`: SessionStart hook that prints repo state, open PRs and, optionally, recent brain memories.

@@ -11,7 +11,7 @@ serialized five builders for hours. Memory is bounded by claude.slice (MemoryMax
 
 Deny = exit 2, the reason on stderr goes back to Claude. `--pr-only` (the laptop hook) runs only the PR guards.
 """
-import json, os, re, shlex, subprocess, sys
+import json, os, re, shlex, shutil, subprocess, sys
 
 MAX_LINES = 300          # biggest file / range a session may print in one go
 MAX_TOOL_CHARS = 5000    # biggest connector (mcp__) payload the model may write
@@ -306,10 +306,30 @@ def pushes(cmd, cwd):
     return out
 
 
+# Owner check before push (2026-10-31: a session woken after a takeover pushed over the new owner's branch).
+# `tracker check` exits 0 when the worktree has no tracker-claim file, so it is safe in every repo; 5 = taken over,
+# 2 = config or API error. Both refuse: a push nobody can vouch for is the failure this stops.
+def check_owner(d):
+    if not shutil.which("tracker") or not os.path.isdir(d):
+        return  # allow-failopen: a laptop without tracker, or a dir git would reject anyway, has nothing to check
+    try:
+        r = subprocess.run(["tracker", "check"], cwd=d, capture_output=True, text=True,
+                           timeout=float(os.environ.get("TOKEN_GUARD_TRACKER_TIMEOUT", "20")))
+    except subprocess.TimeoutExpired:
+        deny("`tracker check` timed out, so this session's claim cannot be confirmed: not pushing. Retry the push; "
+             "if it keeps timing out, stop and report it.")
+    except OSError:
+        return  # allow-failopen: tracker vanished between which() and run(): same as not installed
+    if r.returncode:
+        deny((r.stderr.strip() or f"tracker check exited {r.returncode}") +
+             ("" if r.returncode == 5 else " (the claim cannot be confirmed: do not push)"))
+
+
 def check_task_push(cmd, cwd):
     for d, args in pushes(cmd, cwd):
         if "--delete" in args or "-d" in args:
             continue
+        check_owner(d)
         git = lambda *a: subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, timeout=10).stdout.strip()
         try:
             url = git("remote", "get-url", "origin")
