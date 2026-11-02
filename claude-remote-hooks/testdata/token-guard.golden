@@ -1,0 +1,2937 @@
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `cat` in a loop / xargs / -exec prints every file into context. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"for f in src/*.ts; do cat $f; done\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `cat` in a loop / xargs / -exec prints every file into context. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"find . -name \\\"*.ts\\\" | xargs cat\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `cat` in a loop / xargs / -exec prints every file into context. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"find . -name \\\"*.ts\\\" -exec cat {} \\\\;\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `cat src/*.ts` dumps every matching file. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cat src/*.ts\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `cat` would print 1000 lines. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cat big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: sed range 1,900 is over 300 lines. Narrow it. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"sed -n '1,900p' big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: head/tail of 2000 lines is over 300. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"head -n 2000 big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cat small.txt small2.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cat big.txt | grep 5\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cat > out.txt <<EOF\\nx\\nEOF\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"sed -n '10,80p' big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git log | head -n 500 > log.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git status\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm run verify\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm ci\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm install --frozen-lockfile\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm test\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npx tsc --noEmit\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm -C packages/app install\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm --prefix web ci\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm --filter api i --frozen-lockfile\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm view left-pad version\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: mcp__claude_ai_Google_Drive__create_file payload is 6015 chars; every char is output tokens. Never pass file contents through a connector. Upload from disk: `rclone copy <file-or-dir> gdrive:<folder>`, then `rclone link gdrive:<folder>/<file>` and send only the link. Repo code/docs go through git/gh.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"mcp__claude_ai_Google_Drive__create_file\",\"tool_input\":{\"content\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"mcp__claude_ai_Gmail__create_draft\",\"tool_input\":{\"body\":\"short email with a link\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: <T>/big.txt has 1000 lines; reading it whole costs ~12K tokens on every later call. Pass offset/limit. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"<T>\",\"tool_input\":{\"file_path\":\"<T>/big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"<T>\",\"tool_input\":{\"file_path\":\"<T>/big.txt\",\"offset\":1,\"limit\":200}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"<T>\",\"tool_input\":{\"file_path\":\"<T>/small.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"SessionStart\",\"source\":\"compact\"}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"This session just auto-compacted. Keep going: check the branch and next step with git status, do not re-read files you already summarised, and finish the task end to end.\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "not json",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: PRs in acme/task-api target `chore/integration`: add `--base chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base beta --title t --body-file good.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: PRs in acme/task-api target `chore/integration`: add `--base chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --title t --body-file good.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base chore/integration --title t --body-file nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base chore/integration --title t --body-file <T>/partnoleft.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create --draft -R acme/task-api --base chore/integration --title t --body-file <T>/good.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create --draft -R acme/task-api --base chore/integration --title t --body-file <T>/phone.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base chore/integration --title t --body-file <T>/phone.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base chore/integration --title t --body 'Closes T-127\\n## What changed\\n## Criteria\\n- [x] C1: test\\n## Spec refs\\n## How it was verified\\n## Not verified\\n## Risk'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --title t --body \\\"## What changed\\nx\\n## How it was verified\\n## Not verified\\\"\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for widgets-co/widgets-api needs: What changed; How it was verified; Not verified. Write it to a file, then `--body-file`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --title t --body-file oldwidgets.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base production --head beta --title promote --body x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R someone/other --base main --title t --body x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-13-login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-13-login --title t --body-file fixes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-120-x`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-120-x --title t --body-file closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api but its head branch is unknown: add `--head task/issue-12-<slug>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --title t --body-file closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-12-login --title t --body-file closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta -H task/issue-12-login --title t --body-file fixes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file noissue.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-app --base beta --head fix/login --title t --body-file closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd <T>/op12 && gh pr create -R widgets-co/widgets-api --base beta --title t --body-file <T>/closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd <T>/opfix && gh pr create -R widgets-co/widgets-api --base beta --title t --body-file <T>/closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (oplify-task.md), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 84 -R acme/task-api --squash --delete-branch\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"_ok=1; _v=$(gh pr view 84 -R acme/task-api --json url,baseRefName,headRefOid -q '.url+\\\" \\\"+.baseRefName+\\\" \\\"+.headRefOid') || _ok=0; _h=${_v##* }; _b=${_v% *}; case \\\"$_b\\\" in */acme/task-api/pull/*\\\" chore/integration\\\"|*/widgets-co/widgets-api/pull/*\\\" beta\\\"|*/widgets-co/widgets-app/pull/*\\\" beta\\\") ;; */acme/task-api/pull/*|*/widgets-co/widgets-api/pull/*|*/widgets-co/widgets-app/pull/*|\\\"\\\") _ok=0; echo \\\"token-guard: merge refused: PR 84 targets ${_b##* }; merge only into the repo's merge base (the first base in routine-policy.json)\\\" >&2 ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) _r=${_b#https://github.com/}; _c=$(gh api \\\"repos/${_r%%/pull/*}/commits/$_h/status\\\" -q '[.statuses[]|select(.context==\\\"local-ci\\\")][0].state'); [ \\\"$_c\\\" = success ] || { _ok=0; echo \\\"token-guard: merge refused: PR 84 head ${_h:0:7} has local-ci=${_c:-none}; run ci-run 84 first (GitHub CI cannot run)\\\" >&2; } ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) gh pr view 84 -R acme/task-api --json body -q .body | <PY> <HOOK> --check-body acme/task-api 84 >&2 || _ok=0 ;; esac; [ \\\"$_ok\\\" = 1 ] && { gh pr merge 84 -R acme/task-api --squash --delete-branch\\n}\"}, \"permissionDecisionReason\": \"token-guard: merge runs only if the PR targets its repo's merge base\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr view 84 -R acme/task-api\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the `local-ci` status is posted only by ci-run, which runs CI on the head: run `ci-run <pr>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/statuses/abc -f state=success -f context=local-ci\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the `local-ci` status is posted only by ci-run, which runs CI on the head: run `ci-run <pr>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api -X POST repos/acme/task-api/statuses/abc -f state=success -f context=local-ci\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the `local-ci` status is posted only by ci-run, which runs CI on the head: run `ci-run <pr>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/statuses/abc --method POST -f state=success -f context=local-ci\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the `local-ci` status is posted only by ci-run, which runs CI on the head: run `ci-run <pr>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/statuses/abc -F context=local-ci -F state=success\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the `local-ci` status is posted only by ci-run, which runs CI on the head: run `ci-run <pr>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"echo go && gh api repos/acme/task-api/statuses/abc --raw-field context=local-ci -f state=success --jq '.a | .b'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the `local-ci` status is posted only by ci-run, which runs CI on the head: run `ci-run <pr>`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"curl -X POST -H 'Authorization: token x' -d '{\\\"state\\\":\\\"success\\\",\\\"context\\\":\\\"local-ci\\\"}' https://api.github.com/repos/acme/task-api/statuses/abc\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/statuses/abc --jq '.[] | select(.context==\\\"local-ci\\\")'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/statuses/abc --jq '.[] | select(.context == \\\"local-ci\\\") | .state'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api -X GET repos/acme/task-api/statuses/abc -f per_page=5 --jq '.[]|select(.context==\\\"local-ci\\\")'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/statuses/abc -f state=success -f context=routine/review -f description=ok\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"curl -s https://api.github.com/repos/acme/task-api/statuses/abc | grep local-ci\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"ci-run 77\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"ci-run 84 > /tmp/ci-run-84.log 2>&1\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 77 -R acme/task-api --squash\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"_ok=1; _v=$(gh pr view 77 -R acme/task-api --json url,baseRefName,headRefOid -q '.url+\\\" \\\"+.baseRefName+\\\" \\\"+.headRefOid') || _ok=0; _h=${_v##* }; _b=${_v% *}; case \\\"$_b\\\" in */acme/task-api/pull/*\\\" chore/integration\\\"|*/widgets-co/widgets-api/pull/*\\\" beta\\\"|*/widgets-co/widgets-app/pull/*\\\" beta\\\") ;; */acme/task-api/pull/*|*/widgets-co/widgets-api/pull/*|*/widgets-co/widgets-app/pull/*|\\\"\\\") _ok=0; echo \\\"token-guard: merge refused: PR 77 targets ${_b##* }; merge only into the repo's merge base (the first base in routine-policy.json)\\\" >&2 ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) _r=${_b#https://github.com/}; _c=$(gh api \\\"repos/${_r%%/pull/*}/commits/$_h/status\\\" -q '[.statuses[]|select(.context==\\\"local-ci\\\")][0].state'); [ \\\"$_c\\\" = success ] || { _ok=0; echo \\\"token-guard: merge refused: PR 77 head ${_h:0:7} has local-ci=${_c:-none}; run ci-run 77 first (GitHub CI cannot run)\\\" >&2; } ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) gh pr view 77 -R acme/task-api --json body -q .body | <PY> <HOOK> --check-body acme/task-api 77 >&2 || _ok=0 ;; esac; [ \\\"$_ok\\\" = 1 ] && { gh pr merge 77 -R acme/task-api --squash\\n}\"}, \"permissionDecisionReason\": \"token-guard: merge runs only if the PR targets its repo's merge base\"}}\n"
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "x",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cat big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "x",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: PRs in acme/task-api target `chore/integration`: add `--base chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base beta --title t --body-file good.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "beta",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR 77 in acme/task-api targets beta; merge only into `chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 77 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "chore/integration",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 85 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "chore/integration",
+  "FAKE_CI": "failure",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR 85 head abc1234 has local-ci=failure; run ci-run 85 first (GitHub CI cannot run).\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 85 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "chore/integration",
+  "FAKE_CI": "",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR 85 head abc1234 has local-ci=none; run ci-run 85 first (GitHub CI cannot run).\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 85 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "chore/integration",
+  "FAKE_BODY": "Part of T-1",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR 85 body lacks: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice); What changed; How it was verified; Not verified; a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Fix it with `gh pr edit https://github.com/acme/task-api/pull/85 --body-file <file>` first. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 85 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "chore/integration",
+  "FAKE_BODY": "Checked first: x\n## What changed\nx\n## How it was verified\ny\n## NOT VERIFIED\nnone\nCloses T-204",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR 85 body lacks: a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Fix it with `gh pr edit https://github.com/acme/task-api/pull/85 --body-file <file>` first. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 85 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "chore/integration",
+  "FAKE_BODY": "## What changed",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR 85 body lacks: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice); How it was verified; Not verified; a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Fix it with `gh pr edit https://github.com/acme/task-api/pull/85 --body-file <file>` first. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 85 -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "beta",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR https://github.com/acme/task-api/pull/77 in acme/task-api targets beta; merge only into `chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge https://github.com/acme/task-api/pull/77\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "beta",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge 12 -R someone/scripts --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_BASE": "beta",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: merge refused: PR (current branch) in acme/task-api targets beta; merge only into `chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge -R acme/task-api --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr merge --squash -R acme/task-api\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"_ok=1; _v=$(gh pr view  -R acme/task-api --json url,baseRefName,headRefOid -q '.url+\\\" \\\"+.baseRefName+\\\" \\\"+.headRefOid') || _ok=0; _h=${_v##* }; _b=${_v% *}; case \\\"$_b\\\" in */acme/task-api/pull/*\\\" chore/integration\\\"|*/widgets-co/widgets-api/pull/*\\\" beta\\\"|*/widgets-co/widgets-app/pull/*\\\" beta\\\") ;; */acme/task-api/pull/*|*/widgets-co/widgets-api/pull/*|*/widgets-co/widgets-app/pull/*|\\\"\\\") _ok=0; echo \\\"token-guard: merge refused: PR  targets ${_b##* }; merge only into the repo's merge base (the first base in routine-policy.json)\\\" >&2 ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) _r=${_b#https://github.com/}; _c=$(gh api \\\"repos/${_r%%/pull/*}/commits/$_h/status\\\" -q '[.statuses[]|select(.context==\\\"local-ci\\\")][0].state'); [ \\\"$_c\\\" = success ] || { _ok=0; echo \\\"token-guard: merge refused: PR  head ${_h:0:7} has local-ci=${_c:-none}; run ci-run  first (GitHub CI cannot run)\\\" >&2; } ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) gh pr view  -R acme/task-api --json body -q .body | <PY> <HOOK> --check-body acme/task-api  >&2 || _ok=0 ;; esac; [ \\\"$_ok\\\" = 1 ] && { gh pr merge --squash -R acme/task-api\\n}\"}, \"permissionDecisionReason\": \"token-guard: merge runs only if the PR targets its repo's merge base\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: feat/t247-ownership-disputes is not claimed on GitHub. Run `claim-branch acme/task-api feat/t247-ownership-disputes chore/integration` first; exit 3 means another session holds the task: stop. Then `git fetch`, rebase your commits onto origin/feat/t247-ownership-disputes and push.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push -u origin feat/t247-ownership-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: feat/t205-x is not claimed on GitHub. Run `claim-branch acme/task-api feat/t205-x chore/integration` first; exit 3 means another session holds the task: stop. Then `git fetch`, rebase your commits onto origin/feat/t205-x and push.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: feat/t1-new is not claimed on GitHub. Run `claim-branch acme/task-api feat/t1-new chore/integration` first; exit 3 means another session holds the task: stop. Then `git fetch`, rebase your commits onto origin/feat/t1-new and push.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git -C <T>/tr push origin HEAD:refs/heads/feat/t1-new\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push --force-with-lease origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: plain --force on feat/t247-disputes can wipe another session's claim. Use `--force-with-lease`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push -f origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: plain --force on feat/t247-disputes can wipe another session's claim. Use `--force-with-lease`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin +feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin HEAD:routine-wip/nightly/r2/feat/t205-x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin --delete feat/t1-old\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: feat/t247-ownership-disputes is not claimed on GitHub. Run `claim-branch acme/task-api feat/t247-ownership-disputes chore/integration` first; exit 3 means another session holds the task: stop. Then `git fetch`, rebase your commits onto origin/feat/t247-ownership-disputes and push.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push -u origin feat/t247-ownership-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: feat/t205-x is not claimed on GitHub. Run `claim-branch acme/task-api feat/t205-x chore/integration` first; exit 3 means another session holds the task: stop. Then `git fetch`, rebase your commits onto origin/feat/t205-x and push.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: feat/t1-new is not claimed on GitHub. Run `claim-branch acme/task-api feat/t1-new chore/integration` first; exit 3 means another session holds the task: stop. Then `git fetch`, rebase your commits onto origin/feat/t1-new and push.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git -C <T>/tr push origin HEAD:refs/heads/feat/t1-new\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push --force-with-lease origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: plain --force on feat/t247-disputes can wipe another session's claim. Use `--force-with-lease`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push -f origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: plain --force on feat/t247-disputes can wipe another session's claim. Use `--force-with-lease`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin +feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin HEAD:routine-wip/nightly/r2/feat/t205-x\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin --delete feat/t1-old\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git push origin feat/t1-x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: taken over by someone-else: stop, do not push",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: taken over by someone-else: stop, do not push\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: no token",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "2",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: no token (the claim cannot be confirmed: do not push)\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "0",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: taken over by x",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: taken over by x\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"git push origin chore/x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: taken over by x",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: taken over by x\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git -C <T>/pack push origin chore/x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "0",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin --delete feat/t1-old\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "0",
+  "FAKE_TRACKER_SLEEP": "3",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json",
+  "TOKEN_GUARD_TRACKER_TIMEOUT": "1"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `tracker check` timed out, so this session's claim cannot be confirmed: not pushing. Retry the push; if it keeps timing out, stop and report it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: taken over by someone-else: stop, do not push",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: taken over by someone-else: stop, do not push\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: no token",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "2",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: no token (the claim cannot be confirmed: do not push)\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "0",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: taken over by x",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: taken over by x\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"git push origin chore/x\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_ERR": "tracker: taken over by x",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: tracker: taken over by x\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git -C <T>/pack push origin chore/x\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "0",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "5",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin --delete feat/t1-old\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "FAKE_TRACKER_RC": "0",
+  "FAKE_TRACKER_SLEEP": "3",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json",
+  "TOKEN_GUARD_TRACKER_TIMEOUT": "1"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `tracker check` timed out, so this session's claim cannot be confirmed: not pushing. Retry the push; if it keeps timing out, stop and report it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"git push origin feat/t247-disputes\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"R=acme/design-pack; gh pr create -R $R --base main --head chore/backlog-status-2026-10-29b --title t --body-file <T>/pack.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"cd <T>/pack && R=$(git remote get-url origin | sed -E 's#.*github.com[:/]##'); gh pr create -R $R --base main --title t --body-file <T>/pack.md && gh pr merge -R $R --squash --delete-branch chore/x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create -R acme/design-pack --base main --title t --body-file <T>/pack.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create -R someone/task-api --base main --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api-v2 --base main --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base chore/integration --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"R=acme/task-api; gh pr create -R $R --base chore/integration --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create --base chore/integration --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: PRs in acme/task-api target `chore/integration`: add `--base chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh pr create -R ACME/Task-API --base main --title t --body-file <T>/good.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"R=acme/design-pack; gh pr create -R $R --base main --head chore/backlog-status-2026-10-29b --title t --body-file <T>/pack.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"cd <T>/pack && R=$(git remote get-url origin | sed -E 's#.*github.com[:/]##'); gh pr create -R $R --base main --title t --body-file <T>/pack.md && gh pr merge -R $R --squash --delete-branch chore/x\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create -R acme/design-pack --base main --title t --body-file <T>/pack.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create -R someone/task-api --base main --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api-v2 --base main --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh pr create -R acme/task-api --base chore/integration --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"R=acme/task-api; gh pr create -R $R --base chore/integration --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: the PR body for acme/task-api needs: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice). Write it to a file, then `--body-file`. Format: task-contract.md step 7.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr create --base chore/integration --title t --body-file <T>/nocloses.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: PRs in acme/task-api target `chore/integration`: add `--base chore/integration`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh pr create -R ACME/Task-API --base main --title t --body-file <T>/good.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh pr merge 4 --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr merge 4 -R acme/design-pack --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr merge 12 -R someone/scripts --squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh pr merge 77 --squash\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"_ok=1; _v=$(gh pr view 77 -R acme/task-api --json url,baseRefName,headRefOid -q '.url+\\\" \\\"+.baseRefName+\\\" \\\"+.headRefOid') || _ok=0; _h=${_v##* }; _b=${_v% *}; case \\\"$_b\\\" in */acme/task-api/pull/*\\\" chore/integration\\\"|*/widgets-co/widgets-api/pull/*\\\" beta\\\"|*/widgets-co/widgets-app/pull/*\\\" beta\\\") ;; */acme/task-api/pull/*|*/widgets-co/widgets-api/pull/*|*/widgets-co/widgets-app/pull/*|\\\"\\\") _ok=0; echo \\\"token-guard: merge refused: PR 77 targets ${_b##* }; merge only into the repo's merge base (the first base in routine-policy.json)\\\" >&2 ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) _r=${_b#https://github.com/}; _c=$(gh api \\\"repos/${_r%%/pull/*}/commits/$_h/status\\\" -q '[.statuses[]|select(.context==\\\"local-ci\\\")][0].state'); [ \\\"$_c\\\" = success ] || { _ok=0; echo \\\"token-guard: merge refused: PR 77 head ${_h:0:7} has local-ci=${_c:-none}; run ci-run 77 first (GitHub CI cannot run)\\\" >&2; } ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) gh pr view 77 -R acme/task-api --json body -q .body | <PY> <HOOK> --check-body acme/task-api 77 >&2 || _ok=0 ;; esac; [ \\\"$_ok\\\" = 1 ] && { gh pr merge 77 --squash\\n}\"}, \"permissionDecisionReason\": \"token-guard: merge runs only if the PR targets its repo's merge base\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh pr merge https://github.com/acme/task-api/pull/77\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"_ok=1; _v=$(gh pr view https://github.com/acme/task-api/pull/77 --json url,baseRefName,headRefOid -q '.url+\\\" \\\"+.baseRefName+\\\" \\\"+.headRefOid') || _ok=0; _h=${_v##* }; _b=${_v% *}; case \\\"$_b\\\" in */acme/task-api/pull/*\\\" chore/integration\\\"|*/widgets-co/widgets-api/pull/*\\\" beta\\\"|*/widgets-co/widgets-app/pull/*\\\" beta\\\") ;; */acme/task-api/pull/*|*/widgets-co/widgets-api/pull/*|*/widgets-co/widgets-app/pull/*|\\\"\\\") _ok=0; echo \\\"token-guard: merge refused: PR https://github.com/acme/task-api/pull/77 targets ${_b##* }; merge only into the repo's merge base (the first base in routine-policy.json)\\\" >&2 ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) _r=${_b#https://github.com/}; _c=$(gh api \\\"repos/${_r%%/pull/*}/commits/$_h/status\\\" -q '[.statuses[]|select(.context==\\\"local-ci\\\")][0].state'); [ \\\"$_c\\\" = success ] || { _ok=0; echo \\\"token-guard: merge refused: PR https://github.com/acme/task-api/pull/77 head ${_h:0:7} has local-ci=${_c:-none}; run ci-run https://github.com/acme/task-api/pull/77 first (GitHub CI cannot run)\\\" >&2; } ;; esac; case \\\"$_b\\\" in */acme/task-api/pull/*) gh pr view https://github.com/acme/task-api/pull/77 --json body -q .body | <PY> <HOOK> --check-body acme/task-api https://github.com/acme/task-api/pull/77 >&2 || _ok=0 ;; esac; [ \\\"$_ok\\\" = 1 ] && { gh pr merge https://github.com/acme/task-api/pull/77\\n}\"}, \"permissionDecisionReason\": \"token-guard: merge runs only if the PR targets its repo's merge base\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PUT repos/acme/task-api/pulls/90/merge -f merge_method=squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api --method PUT /repos/acme/task-api/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api --method=put repos/ACME/Task-API/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/{owner}/{repo}/pulls/90/merge -X PUT\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"R=acme/task-api; gh api -X PUT repos/$R/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/3/merge in widgets-co/widgets-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api -X PUT repos/widgets-co/widgets-api/pulls/3/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a GraphQL merge mutation skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:\\\"X\\\"}) { clientMutationId } }'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a GraphQL merge mutation skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api graphql -f query='mutation { enablePullRequestAutoMerge(input:{pullRequestId:\\\"X\\\"}) { clientMutationId } }'\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a GraphQL merge mutation skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api graphql -F query=@<T>/m.graphql\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` repos/.../merges in acme/task-api merges a branch past the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api -X POST repos/acme/task-api/merges -f base=chore/integration -f head=feat/t1-x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PATCH on the chore/integration ref of acme/task-api moves the merge base past the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PATCH repos/acme/task-api/git/refs/heads/chore/integration -f sha=abc\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/pulls/90\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PATCH repos/acme/task-api/pulls/78 -f base=chore/integration\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PUT repos/someone/scripts/pulls/3/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api graphql -F query=@<T>/ok.graphql\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/git/ref/heads/chore/integration\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PUT repos/acme/task-api/pulls/90/merge -f merge_method=squash\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api --method PUT /repos/acme/task-api/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api --method=put repos/ACME/Task-API/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/{owner}/{repo}/pulls/90/merge -X PUT\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/90/merge in acme/task-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"R=acme/task-api; gh api -X PUT repos/$R/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PUT pulls/3/merge in widgets-co/widgets-api skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api -X PUT repos/widgets-co/widgets-api/pulls/3/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a GraphQL merge mutation skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:\\\"X\\\"}) { clientMutationId } }'\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a GraphQL merge mutation skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api graphql -f query='mutation { enablePullRequestAutoMerge(input:{pullRequestId:\\\"X\\\"}) { clientMutationId } }'\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a GraphQL merge mutation skips the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api graphql -F query=@<T>/m.graphql\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` repos/.../merges in acme/task-api merges a branch past the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api -X POST repos/acme/task-api/merges -f base=chore/integration -f head=feat/t1-x\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `gh api` PATCH on the chore/integration ref of acme/task-api moves the merge base past the merge checks; merge with `gh pr merge <n> -R <owner/repo> --squash`, which checks the PR's base, task line and required status first\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PATCH repos/acme/task-api/git/refs/heads/chore/integration -f sha=abc\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/pulls/90\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/pulls/90/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PATCH repos/acme/task-api/pulls/78 -f base=chore/integration\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api -X PUT repos/someone/scripts/pulls/3/merge\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/pack\",\"tool_input\":{\"command\":\"gh api graphql -F query=@<T>/ok.graphql\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>/tr\",\"tool_input\":{\"command\":\"gh api repos/acme/task-api/git/ref/heads/chore/integration\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "ahead chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, resume branch feat/t205-fulfil, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Task\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, schema: no, branch feat/t205-fulfil claim abc1234.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, schema: no. Read task-contract.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: branch feat/t214-coupons is not task 205's. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t214-coupons claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: claim abc1234 is not a claim commit on feat/t205-fulfil on GitHub (or GitHub did not answer: retry once). Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "diverged chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: claim abc1234 is not a claim commit on feat/t205-fulfil on GitHub (or GitHub did not answer: retry once). Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical feat(x): work",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: claim abc1234 is not a claim commit on feat/t205-fulfil on GitHub (or GitHub did not answer: retry once). Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Review PR 77 in acme/task-api and reply in 10 lines\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "ahead chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, resume branch feat/t205-fulfil, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Task\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, schema: no, branch feat/t205-fulfil claim abc1234.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, schema: no. Read task-contract.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: branch feat/t214-coupons is not task 205's. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t214-coupons claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: claim abc1234 is not a claim commit on feat/t205-fulfil on GitHub (or GitHub did not answer: retry once). Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "diverged chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: claim abc1234 is not a claim commit on feat/t205-fulfil on GitHub (or GitHub did not answer: retry once). Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical feat(x): work",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: claim abc1234 is not a claim commit on feat/t205-fulfil on GitHub (or GitHub did not answer: retry once). Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil claim abc1234, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Review PR 77 in acme/task-api and reply in 10 lines\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/task-api#T-205, new, branch feat/t205-fulfil claim abc1234.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/task-api#205, new. Read task-contract.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login claim abc1234, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: branch task/issue-7-other is not task 42's. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-7-other claim abc1234, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch feat/t42-login claim abc1234, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, issue #42: summarise it\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/task-api#T-205, new, branch feat/t205-fulfil claim abc1234.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/task-api#205, new. Read task-contract.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login claim abc1234, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: branch task/issue-7-other is not task 42's. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-7-other claim abc1234, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch feat/t42-login claim abc1234, gate: pnpm test.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, issue #42: summarise it\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/w9-x for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/pol.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/widgets#9, branch task/w9-x claim abc1234\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve task/w9-x for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/pol.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/widgets task 9 needs `branch task/w9-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/widgets task/w9-<slug> main`, leftover `claim-branch --resume acme/widgets <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/widgets#9, new\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/pol.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "identical chore(claim): reserve feat/t205-fulfil for one session",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/bad.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a builder for acme/task-api task 205 needs `branch feat/t205-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch acme/task-api feat/t205-<slug> chore/integration`, leftover `claim-branch --resume acme/task-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Task API, task T-205, new, branch feat/t205-fulfil, schema: no. Read /home/claude-agent/agent-jobs/task-contract.md and follow its \\\"## Build\\\" section.\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/badrx.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/widgets#9, new\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/badrx.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/quote#9, new\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_CMP": "",
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/nope.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/widgets#9, new\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: Read limit 601 is too big. Use limit <= 600. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"<W>/direct\",\"tool_input\":{\"file_path\":\"<W>/direct/big.txt\",\"limit\":601}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"<W>/direct\",\"tool_input\":{\"file_path\":\"<W>/direct/big.txt\",\"limit\":600}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"<W>/direct\",\"tool_input\":{\"file_path\":\"<W>/direct/big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"mcp__x__send\",\"tool_input\":{\"t\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"SessionStart\",\"source\":\"compact\"}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: head/tail of 400 lines is over 300. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<W>/direct\",\"tool_input\":{\"command\":\"tail -n 400 big.txt\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: `cat` in a loop / xargs / -exec prints every file into context. Find the spot with `grep -n PATTERN FILE`, then print only that range with `sed -n 'A,Bp' FILE` (at most 300 lines), or Read with offset/limit. Whole-repo questions: `graphify update <repo>` then `graphify query \"<q>\" --budget 1500`, or hand the reading to a subagent and keep only its findings.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<W>/direct\",\"tool_input\":{\"command\":\"while read f; do cat $f; done < list\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<W>/direct\",\"tool_input\":{\"command\":\"cat 'unclosed\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/x\",\"content\":\"y\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--check-body",
+  "acme/task-api",
+  "77"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "Closes T-1\n## What changed\n## Criteria\n- [x] C1: t\n## Spec refs\n## How it was verified\n## Not verified\n## Risk",
+ "stdout": ""
+}
+{
+ "args": [
+  "--check-body",
+  "acme/task-api",
+  "77"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 1,
+ "stderr": "",
+ "stdin": "## What changed",
+ "stdout": "token-guard: merge refused: PR 77 body lacks: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice); How it was verified; Not verified; a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Fix it with gh pr edit --body-file <file> first. Format: task-contract.md step 7.\n"
+}
+{
+ "args": [
+  "--check-body",
+  "acme/task-api"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 1,
+ "stderr": "",
+ "stdin": "## What changed",
+ "stdout": "token-guard: merge refused: PR (current branch) body lacks: a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice); How it was verified; Not verified; a criteria checklist (`- [x] <criterion>: <evidence>`); Spec refs; Risk. Fix it with gh pr edit --body-file <file> first. Format: task-contract.md step 7.\n"
+}
+{
+ "args": [
+  "--check-body",
+  "someone/other",
+  "3"
+ ],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
+  "TOKEN_GUARD_POLICY": "<W>/run/none.json"
+ },
+ "rc": 1,
+ "stderr": "",
+ "stdin": "## What changed",
+ "stdout": "token-guard: merge refused: PR 3 body lacks: How it was verified; Not verified. Fix it with gh pr edit --body-file <file> first.\n"
+}
