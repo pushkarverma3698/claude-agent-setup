@@ -60,7 +60,7 @@ def repo_of_url(url):
 
 KEYS = ["TRACKER_REPO", "TRACKER_PATH", "TRACKER_BRANCH", "CODE_REPO", "REPO_DIR", "WORK_BASE", "WORKTREE_ROOT", "BRANCH_FMT",
         "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE",
-        "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
+        "ISSUE_IMPORT", "ISSUE_REPO", "ISSUE_STATUS", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
 
 
 def load_conf(args, project_hint=""):
@@ -88,8 +88,16 @@ def load_conf(args, project_hint=""):
             raise Fail(2, f"{path}: {k} is not set")
     d = {"TRACKER_BRANCH": "main", "BRANCH_FMT": "feat/t{num}-{slug}", "ID_COL": "Task ID", "ID_RE": r"T-\d+", "TITLE_COL": "Title",
          "STATUS_COL": "Status", "DEPS_COL": "Depends on", "ORDER_COLS": "Milestone", "LEASE_HOURS": "6", "MAX_BUILDERS": "3", "NOTIFY_CMD": "claude-notify"}
+    if c.get("ISSUE_IMPORT") == "1":  # the queue is GitHub issues: rows are `#<number>`
+        d |= {"ID_RE": r"#\d+", "BLOCK_COL": "Blocked by", "BLOCK_RE": r"\S.*", "ISSUE_REPO": c["CODE_REPO"],
+              "ISSUE_STATUS": "agent:blocked=Blocked,agent:ready=Not started,agent:working=Not started"}
     for k, v in d.items():
         c.setdefault(k, v)
+    if c.get("ISSUE_IMPORT") == "1":
+        c["issue_status"] = [(k.strip().lower(), v.strip()) for k, _, v in (x.partition("=") for x in c["ISSUE_STATUS"].split(",")) if k.strip()]
+        bad = [v for _, v in c["issue_status"] if v not in STATUSES]
+        if bad:
+            raise Fail(2, f"{path}: ISSUE_STATUS has unknown status {bad[0]!r}")
     name = c["CODE_REPO"].split("/")[-1]
     c.setdefault("REPO_DIR", next((p for p in (os.path.expanduser(f"~/work/{name}"), os.path.expanduser(f"~/Projects/{name}")) if os.path.isdir(p)), ""))
     if c["REPO_DIR"]:
@@ -449,9 +457,91 @@ def summary(t, rec):
             "blocker": g("Blocker"), "updated": g("Updated")}
 
 
+BLOCKED_BY = re.compile(r"^[\s*_>-]*blocked by[\s:*_]*(.*)$", re.I | re.M)
+ISSUE_REF = re.compile(r"(?:\b([\w.-]+/[\w.-]+))?#(\d+)")
+CAN_RELABEL = {"Not started", "Blocked"}  # Waiting is active: a holderless Waiting row is a leftover, not relabelable
+
+
+class IssueStates:
+    """{number: 'open'|'closed'} per repo, one `gh issue list` per repo per run."""
+    def __init__(self):
+        self.cache = {}
+
+    def of(self, repo):
+        if repo.lower() not in self.cache:
+            out = json.loads(gh_out("issue", "list", "-R", repo, "--state", "all", "-L", "1000", "--json", "number,state") or "[]")
+            self.cache[repo.lower()] = {i["number"]: i["state"].lower() for i in out}
+        return self.cache[repo.lower()]
+
+
+def issue_blockers(cfg, body, states):
+    """(same-repo '#N' list, other-repo 'owner/repo#N' list) of the blockers still open; a blocker GitHub does not list stays."""
+    here, same, other = cfg["ISSUE_REPO"].lower(), [], []
+    for line in BLOCKED_BY.finditer(body or ""):
+        for repo, num in ISSUE_REF.findall(line.group(1)):
+            repo = repo or cfg["ISSUE_REPO"]
+            if states.of(repo).get(int(num), "open") != "open":
+                continue
+            ref, bucket = (f"#{num}", same) if repo.lower() == here else (f"{repo}#{num}", other)
+            if ref not in bucket:
+                bucket.append(ref)
+    return same, other
+
+
+def apply_issue_import(t, open_issues, states):
+    """GitHub issues are the truth: add rows for new open issues, Done for closed ones, keep only open blockers in the dep columns."""
+    cfg, changes, idc = t.cfg, [], t.cfg["ID_COL"]
+    rows = {t.get(r, idc): r for r in t.id_rows()}
+    label_of = lambda labels: next(((key, st) for key, st in cfg["issue_status"] if key == "*" or key in labels), (None, None))
+    is_open = {f"#{i['number']}" for i in open_issues}
+    for task, rec in rows.items():
+        if task not in is_open and t.status(rec) != "Done" and states.of(cfg["ISSUE_REPO"]).get(int(task[1:])) == "closed":
+            changes.append(f"{task} Done (issue closed)")
+            t.setmany(rec, Status="Done", Updated=stamp(), **{"Next step": "", "Blocker": ""})
+    for i in sorted(open_issues, key=lambda i: i["number"]):
+        task, labels = f"#{i['number']}", {l["name"].lower() for l in i.get("labels", [])}
+        key, want = label_of(labels)
+        rec = rows.get(task)
+        if rec is None:
+            if want is None:
+                continue
+            if t.recs[-1].raw and not re.search(r"[\r\n]$", t.recs[-1].raw):
+                t.recs[-1].raw += t.eol
+            rec = Rec([""] * len(t.head.cells), t.eol)
+            t.recs.append(rec)
+            for col, val in ((idc, task), (cfg["TITLE_COL"], i["title"]), ("Status", want)):
+                t.set(rec, col, val)
+            if want == "Blocked":
+                t.set(rec, "Blocker", f"issue label {key}")
+            rec.dirty = True
+            changes.append(f"{task} added ({want})")
+        else:
+            if not t.get(rec, cfg["TITLE_COL"]) and i["title"]:
+                t.set(rec, cfg["TITLE_COL"], i["title"])
+            if want and want != t.status(rec) and t.status(rec) in CAN_RELABEL and not t.get(rec, "Holder"):
+                changes.append(f"{task} {t.status(rec)} -> {want} (label)")
+                t.set(rec, "Status", want)
+                if want == "Blocked" and not t.get(rec, "Blocker"):
+                    t.set(rec, "Blocker", f"issue label {key}")
+        same, other = issue_blockers(cfg, i.get("body"), states)
+        for col, new, word in ((cfg["DEPS_COL"], same, "depends on"), (cfg["BLOCK_COL"], other, "blocked by")):
+            if re.findall(r"\S+#\d+|#\d+", t.get(rec, col)) != new:
+                t.set(rec, col, ", ".join(new))
+                changes.append(f"{task} {word} {', '.join(new)}" if new else f"{task} no longer {word} anything open")
+    return changes
+
+
 def cmd_sync(cfg, a, quiet=False):
     prs = merged_prs(cfg)
-    changes, _ = mutate(cfg, f"tracker: sync ({identity(cfg)[2]})", lambda t: (lambda c: (bool(c), c))(apply_sync(t, prs)))
+    imp = cfg.get("ISSUE_IMPORT") == "1"
+    issues = json.loads(gh_out("issue", "list", "-R", cfg["ISSUE_REPO"], "--state", "open", "-L", "1000",
+                               "--json", "number,title,labels,body") or "[]") if imp else []
+    states = IssueStates()
+
+    def fn(t):
+        c = (apply_issue_import(t, issues, states) if imp else []) + apply_sync(t, prs)  # import first, so a merged Closes settles in one sync
+        return bool(c), c
+    changes, _ = mutate(cfg, f"tracker: sync ({identity(cfg)[2]})", fn)
     if not quiet:
         print("\n".join(changes) or "nothing to sync")
 

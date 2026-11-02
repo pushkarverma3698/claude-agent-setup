@@ -21,4 +21,6 @@ The tracker (a CSV in its own repo, driven by the `tracker` tool) is the only re
 
 Exit 5 from any command, or a push refused with "taken over": another session took the row. Stop, push nothing, report it.
 
+If the project imports GitHub issues (`ISSUE_IMPORT=1`), ids look like `#246` and `tracker sync` refreshes the rows from the issues first; a NOT READY row names the open blocker. Close the issue (`Closes #246` in the PR) rather than editing the row.
+
 Examples use `T-12` and PR 34; the real ids come from `tracker next`.
