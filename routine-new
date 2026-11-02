@@ -19,6 +19,8 @@
 #   --verdict-at <T>    verdict time, HH:MM:SS UTC (default: 6 h after the last HH:MM time; required otherwise)
 #   --boot-check <name> the CI check that boots the app: the verdict and branch protection require it
 #   --no-deploy         write everything, skip setup-claude-routines (the guard policy is still installed)
+#   --paused            write PAUSED=1 in the conf: the timer is installed but stopped and disabled, so nothing runs
+#                       before the job contract is written (setup-claude-routines arms it once PAUSED=1 is removed)
 #   --dry-run           read-only: run every check, print every action it would take and the conf it would write,
 #                       write nothing (GitHub, VPS or the conf folder); exit 1 when a real run would stop
 #   --allow-unprotected go on when GitHub refuses branch protection (a private repo on a free plan); the guard hook
@@ -90,7 +92,7 @@ fi
 # ---- arguments --------------------------------------------------------------------------------------
 [ $# -ge 3 ] || usage
 repo=$1 base=$2 sched=$3; shift 3
-name="" profile=alt,alt2,main model=opus vat="" boot="" deploy=1 trepo="" tpath=backlog.csv tz="" unprot=0
+name="" profile=alt,alt2,main model=opus vat="" boot="" deploy=1 trepo="" tpath=backlog.csv tz="" unprot=0 paused=0
 while [ $# -gt 0 ]; do
   case $1 in
     --name) name=${2:?}; shift 2 ;;
@@ -102,6 +104,7 @@ while [ $# -gt 0 ]; do
     --verdict-at) vat=${2:?}; shift 2 ;;
     --boot-check) boot=${2:?}; shift 2 ;;
     --no-deploy) deploy=0; shift ;;
+    --paused) paused=1; shift ;;
     --dry-run) dry=1; shift ;;
     --allow-unprotected) unprot=1; shift ;;
     *) usage ;;
@@ -292,6 +295,7 @@ conf=$(
   echo "SCHEDULE=\"$sched\"   # HH:MM times, one timer slot each; a slot that finds the lead still working skips"
   [ $timeform = 0 ] || echo "SCHEDULE_TZ=$tz               # zone of those times (default UTC)"
   echo "ARGS=(--model $model --effort medium)"
+  [ $paused = 0 ] || echo "PAUSED=1                     # timer stopped and disabled; delete this line and run setup-claude-routines to arm it"
   echo "# Code-only verdict after the run (routine-verdict@<VERDICT>.timer)."
   echo "VERDICT=$name"
   echo "VERDICT_AT=$vat              # UTC, daily"
@@ -376,6 +380,7 @@ fi
 todo=("Write the job contract: the local gate (install + test commands CI runs), services and PR body in $HOST:$JOBS/$name.md: ssh -t $HOST 'sudo -u claude-agent -H \${EDITOR:-nano} $JOBS/$name.md'"
       "Fill the tracker: replace the example row T-1 with real tasks (ids must be T-<number>): https://github.com/$trepo/edit/$tbranch/$tpath"
       ${todo[@]+"${todo[@]}"})
+[ $paused = 0 ] || todo+=("Arm the timer: delete PAUSED=1 from ${DEFS/#$HOME/~}/$name.conf, then run $HERE/setup-claude-routines")
 echo "== left for you (${#todo[@]})"
 i=0; for t in "${todo[@]}"; do i=$((i + 1)); echo "  $i. $t"; done
 if [ $dry = 1 ]; then

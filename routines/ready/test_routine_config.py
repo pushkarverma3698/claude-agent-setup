@@ -5,6 +5,7 @@
   - claude-routine slot_busy: a timer slot that fires while the lead is working prints one line and skips (bash 4+, GNU date)
   - routine-new on an EMPTY code repo with a fake gh/ssh: first commit, integration branch, private tracker repo seeded,
     protection, conf with routine + tracker keys, no GitHub labels, guard policy installed and checked, steps left listed
+  - routine-new --paused writes PAUSED=1 (timer installed but disabled) and lists arming it as a step left
   - routine-new --dry-run writes nothing and prints every action; refused protection stops unless --allow-unprotected
   - routine-policy refuses a tracker conf (CODE_REPO) whose repo has no GUARD_REPOS entry
 No network: gh, ssh and systemd-analyze are fakes on PATH.
@@ -376,6 +377,19 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         # exactly two steps left: the job contract and the tracker rows
         self.assertIn("== left for you (2)", r.stdout)
         self.assertIn("https://github.com/acme/shop-tracker/edit/main/backlog.csv", r.stdout)
+
+    def test_paused_writes_paused_1_and_lists_arming_as_a_step_left(self):
+        r = self.new("acme/shop", "beta", "03:04", "--no-deploy", "--paused")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        chk = subprocess.run(["bash", "-c", 'source "$1"; echo "${PAUSED:-unset}"', "_", f"{self.confs}/shop-daily.conf"],
+                             capture_output=True, text=True)
+        self.assertEqual(chk.stdout.strip(), "1")
+        self.assertIn("== left for you (3)", r.stdout)
+        self.assertIn("Arm the timer: delete PAUSED=1", r.stdout)
+
+    def test_without_paused_the_conf_has_no_paused_key(self):
+        self.assertEqual(self.new("acme/shop", "beta", "03:04", "--no-deploy").returncode, 0)
+        self.assertNotIn("PAUSED", self.conf())
 
     def test_dry_run_writes_nothing_and_prints_every_action(self):
         r = self.new("acme/shop", "beta", "03:04", "--dry-run")
