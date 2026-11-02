@@ -46,5 +46,5 @@ def check_issue_head(cmd, cwd, repo, body):
         deny(f"this PR closes #{issues[0]} in {repo} but its head branch is unknown: add `--head {want}`.")
     if not m or any(i != m.group(1) for i in issues):
         deny(f"this PR closes #{', #'.join(issues)} in {repo} from `{head}`; an issue PR comes from its claimed task "
-             f"branch `{want}` (oplify-task.md), or the nightly queue rebuilds it. Claim it with "
+             f"branch `{want}` (the repo task file), or the nightly queue rebuilds it. Claim it with "
              f"`{claim_cmd(repo, want)}` (exit 3: another session holds it), push there, then open the PR.")
