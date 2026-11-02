@@ -28,6 +28,21 @@ python3 routines/ready/test_tracker.py
 python3 routines/ready/test_routine_fixes.py   # some cases need GNU tools (run on Linux)
 ```
 
+## Onboarding a repo: routine-new
+
+```bash
+./routine-new <owner/repo> <integration-branch> "HH:MM [HH:MM…]" [--tz <zone>] [--boot-check <ci-check>] --dry-run
+./routine-new <owner/repo> <integration-branch> "HH:MM [HH:MM…]" [--tz <zone>] [--boot-check <ci-check>]
+```
+
+`--dry-run` runs every read-only check, prints each write it would make (GitHub, VPS, conf folder) and the conf it would write, and exits 1 when a real run would stop. A real run then, each step skipping what exists: checks write access here and for `claude-agent` on the VPS, creates the integration branch, creates and seeds the private tracker repo, protects the branch, clones on the VPS, writes the conf (routine, tracker and `GUARD_REPOS` keys) and the VPS job file, runs `setup-claude-routines`, and checks that the guard policy on the laptop and on the VPS lists the repo. `--no-deploy` skips the timers but still installs the policy.
+
+It stops, instead of carrying on unguarded, when GitHub refuses branch protection (a private repo on a free plan; `--allow-unprotected` goes on and lists it as a step left) or when the policy does not list the repo. `routine-policy` itself refuses a conf with `CODE_REPO` and no `GUARD_REPOS` entry for that repo in any conf.
+
+It ends with the steps left for you, normally two: write the job contract (the local gate, services and PR body in the VPS job file) and replace the example row `T-1` in the tracker.
+
+Task ids must be `T-<number>`: the tracker's default `ID_RE`, the `feat/t<N>-` branch regex `routine-new` writes, and the guard's PR-body task line (`task=T-NNN` in `GUARD_REPOS`; `token-guard.py` matches `Closes T-<N>` / `Part of T-<N>` only) all assume it. A repo with another id scheme is not covered by this setup.
+
 ## Tracker
 
 `routines/bin/tracker` keeps task state in a CSV inside a GitHub repo. Only this tool writes the file, through `gh api` (the contents API), and every write is a compare-and-swap on the file sha: on a conflict the same change is re-applied to the fresh file and re-validated, so a claim on a row someone took meanwhile fails with exit 3 instead of overwriting.
