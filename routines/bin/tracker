@@ -412,7 +412,7 @@ def apply_sync(t, prs):
             rec = t.find(task)
             if rec is not None and t.status(rec) != "Done":
                 changes.append(f"{task} {t.status(rec)} -> Done (#{n} Closes)")
-                t.setmany(rec, Status="Done", PR=f"#{n}", Updated=stamp(at))
+                t.setmany(rec, Status="Done", PR=f"#{n}", Updated=stamp(at), **{"Next step": "", "Blocker": ""})
         for task in part:
             rec = t.find(task)
             if rec is not None and t.status(rec) == "Not started":

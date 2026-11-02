@@ -519,6 +519,16 @@ class Behaviour(Sandbox):
         self.put(self.held_rows(2) + [row("T-101", "Fresh"), row("T-102", status="Building", Holder="x:y:z", Branch="feat/t102-old", Updated=ago(9))])
         self.assertEqual(self.tracker("next").stdout.splitlines()[0], "NEXT LEFTOVER T-102")
 
+    def test_17_closes_clears_next_step_and_blocker(self):
+        # a Done row kept the "Left: ..." text of an earlier Part-of PR and still read like work was left
+        writef(os.path.join(self.fake, "prs.json"), json.dumps([{"number": 12, "headRefName": "feat/t101-thing", "mergedAt": "2026-10-30T10:15:42Z",
+                                                                  "body": "Closes T-101\n"}]))
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(1), PR="#5",
+                      **{"Next step": "SV1-SV4", "Blocker": "waiting on X"})])
+        self.assertEqual(self.tracker("sync").returncode, 0)
+        got = self.rows()["T-101"]
+        self.assertEqual((got["Status"], got["PR"], got["Next step"], got["Blocker"]), ("Done", "#12", "", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
