@@ -177,10 +177,11 @@ for f in "$r"/ready/*.py; do n=$(basename "$f"); case "$n" in test_*) continue;;
 for s in "$STAGE"/skills/*/; do
   [ -d "$s" ] || continue
   for cfg in /home/claude-agent/.claude /home/claude-agent/.claude-alt /home/claude-agent/.claude-alt2; do
+    [ -L "$cfg/skills" ] && continue  # a linked skills folder belongs to whatever tool made the link
     d="$cfg/skills/$(basename "$s")"
     diff -rq "$s" "$d" >/dev/null 2>&1 && continue
     [ ! -d "$d" ] || rm -r -- "$d"
-    mkdir -p "$cfg/skills"; cp -r "$s" "$d"; chown -R claude-agent:claude-agent "$cfg/skills"; echo "  wrote $d"
+    mkdir -p "$cfg/skills"; cp -r "$s" "$d"; chown claude-agent:claude-agent "$cfg/skills"; chown -R claude-agent:claude-agent "$d"; echo "  wrote $d"
   done
 done
 rm -r "$STAGE"
