@@ -1,0 +1,6 @@
+[Unit]
+Description=Stop Claude Remote Control sessions idle for more than 6 hours, and runaway tool jobs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/claude-session-reaper

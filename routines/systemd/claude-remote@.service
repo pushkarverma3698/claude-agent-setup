@@ -1,0 +1,25 @@
+# Written by setup-claude-remote on the founder's laptop; edit it there.
+# Instance = <profile>:<target>, e.g. main:work, main:acme-app, alt:other-repo.
+[Unit]
+Description=Claude Remote Control %i (drive from the Claude app)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Slice=claude.slice
+User=claude-agent
+Environment=HOME=/home/claude-agent
+ExecStart=/usr/local/bin/claude-remote-serve %i
+# The TUI redraws its status screen every ~70s: 12 servers wrote ~100M/day to syslog (2026-10-21).
+StandardOutput=null
+Restart=always
+RestartSec=15
+RestartSteps=8
+RestartMaxDelaySec=10min
+RestartPreventExitStatus=64
+OOMPolicy=continue
+OOMScoreAdjust=500
+
+[Install]
+WantedBy=multi-user.target

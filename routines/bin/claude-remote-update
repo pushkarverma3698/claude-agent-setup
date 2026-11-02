@@ -1,0 +1,14 @@
+#!/bin/bash
+# Nightly: update the native claude, then restart a Remote Control server only when it runs an
+# older binary and has no session under it. Written by setup-claude-remote; edit it there.
+set -uo pipefail
+sudo -u claude-agent -H /home/claude-agent/.local/bin/claude update || echo "claude update failed; restarting nothing new"
+cur=$(readlink -f /home/claude-agent/.local/bin/claude)
+for u in $(systemctl list-units 'claude-remote@*' --state=active --no-legend --plain | awk '{print $1}'); do
+  m=$(systemctl show -p MainPID --value "$u"); srv=$(pgrep -P "$m" | head -1)
+  [ -n "$srv" ] || continue
+  exe=$(readlink -f "/proc/$srv/exe")
+  if [ "$exe" = "$cur" ]; then echo "$u: current"; continue; fi
+  if pgrep -P "$srv" >/dev/null; then echo "$u: outdated but busy, next night"; continue; fi
+  echo "$u: restarting onto $cur"; systemctl restart "$u"
+done

@@ -1,0 +1,26 @@
+#!/bin/bash
+# claude-remote-serve <main|alt|alt2>:<work|repo> — one Remote Control server for claude-agent.
+# Written by setup-claude-remote on the founder's laptop; edit it there.
+set -euo pipefail
+[ -r /etc/claude-routines/routines.env ] && . /etc/claude-routines/routines.env   # optional: HOST_LABEL, REVIEW_KEEP, TESTDB_CONTAINER (2026-11-02, was hard-coded)
+label="${HOST_LABEL:-$(hostname -s)}"
+inst="${1:-}"
+[[ "$inst" == *:* ]] || { echo "usage: claude-remote-serve <main|alt|alt2>:<work|repo>" >&2; exit 64; }
+profile="${inst%%:*}"; target="${inst#*:}"
+case "$profile" in
+  main) unset CLAUDE_CONFIG_DIR ;;
+  alt|alt2) export CLAUDE_CONFIG_DIR=/home/claude-agent/.claude-$profile ;;
+  *)    echo "claude-remote-serve: unknown profile $profile" >&2; exit 64 ;;
+esac
+claude=/home/claude-agent/.local/bin/claude
+[ -x "$claude" ] || claude=/usr/bin/claude
+if [ "$target" = work ]; then
+  cd /home/claude-agent/work
+  name=$label; spawn="--spawn same-dir --capacity 2"
+else
+  [ -d "/home/claude-agent/work/$target/.git" ] || { echo "claude-remote-serve: no repo ~/work/$target" >&2; exit 64; }
+  cd "/home/claude-agent/work/$target"
+  name="$label-$target"; spawn="--spawn worktree --capacity 2"
+fi
+# remote-control wants a terminal; script gives it a pty and keeps the server in the foreground.
+exec /usr/bin/script -qfc "$claude remote-control --name $name $spawn --no-create-session-in-dir" /dev/null

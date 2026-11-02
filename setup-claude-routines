@@ -57,6 +57,13 @@
 #                                       transient daemon inside the timer's unit, killed when it ends. The
 #                                       wrapper, not the daemon, is the MainPID, so the daemon handing over to
 #                                       a successor after a launcher update no longer kills the workers.
+#     claude-agent-fetch.timer          every 15 min: git fetch --prune in each ~/work repo, so worktree bases stay fresh
+#     claude-clutter-clean.timer        daily 03:40: caches, old builds, stale worktrees and review checkouts (claude-clutter-clean)
+#     claude-remote-update.timer        nightly: claude update, then restart only idle, outdated Remote Control servers
+#     claude-session-reaper.timer       every 5 min: stop Remote Control sessions with no transcript write for IDLE_HOURS
+#     claude-remote@<profile>:<target>.service   one Remote Control server (claude-remote-serve); started by hand, not here
+#     (the six scripts behind these, and routine-worktree, are in routines/bin; they read optional HOST_LABEL, REVIEW_KEEP,
+#      TESTDB_CONTAINER from /etc/claude-routines/routines.env)
 #     routine-sweep.timer               hourly at :17: routines/bin/routine-sweep restarts a lead for leftover tracker rows, sends
 #                                       one Telegram per dead run and a daily reminder per Blocked row (replaces claude-routine-resume)
 #     claude-routine@<name>.timer       one OnCalendar per SCHEDULE time (drop-in), Persistent=true
@@ -152,6 +159,7 @@ r="$STAGE/routines"
 put 755 /usr/local/bin/claude-notify "$STAGE/claude-notify"
 put 755 /usr/local/bin/routine-verdict "$STAGE/routine-verdict"
 for f in "$r"/bin/*; do
+  [ -f "$f" ] || continue   # a test run leaves routines/bin/__pycache__ in the checkout
   n=$(basename "$f"); m=755; [ "$n" = claude-profile-env ] && m=644
   put "$m" "/usr/local/bin/$n" "$f"
 done
@@ -252,6 +260,9 @@ for u in claude-routine-resume.timer claude-routine-resume.service; do
 done
 systemctl daemon-reload
 systemctl enable --now routine-sweep.timer >/dev/null 2>&1
+# VPS housekeeping timers, moved into git 2026-11-02 (they were enabled on the VPS before; arm = enable, and start with the
+# stamp at now, so a re-install never fires a catch-up run). Their files come from routines/bin and routines/systemd above.
+for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper; do arm "$t.timer"; done
 echo "  routine-sweep.timer next: $(systemctl show -p NextElapseUSecRealtime --value routine-sweep.timer)"
 settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
   if [ "$2" = 1 ]; then

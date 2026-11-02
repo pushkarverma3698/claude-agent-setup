@@ -1,0 +1,87 @@
+#!/bin/bash
+# Stop Remote Control sessions with no activity for IDLE_HOURS (default 6). A session child
+# (claude --print --sdk-url …) never exits on its own and holds ~300M with its MCP children. Only a
+# live session in claude.slice whose sessions/<pid>.json matches the process start time is
+# stopped; the transcript stays, so the founder can resume it from the app. DRY_RUN=1 only lists.
+# "Activity" is the newest write to the session's transcript (projects/*/<sessionId>.jsonl and its
+# subagent/tool-result dir), NOT statusUpdatedAt (2026-10-25: the nightly update re-stamps that on
+# every idle session at ~21:35Z, so no clock on it ever ran out and sessions lived for days). A
+# session with no transcript counts from startedAt. The status field is not trusted either way.
+# Every stop or kill is sent to Telegram through /usr/local/bin/claude-notify when that exists.
+# Written by setup-claude-remote on the founder's laptop; edit it there.
+set -uo pipefail
+[ -r /etc/claude-routines/routines.env ] && . /etc/claude-routines/routines.env   # optional: HOST_LABEL, REVIEW_KEEP, TESTDB_CONTAINER (2026-11-02, was hard-coded)
+label="${HOST_LABEL:-$(hostname -s)}"
+hours="${IDLE_HOURS:-6}"; now=$(( $(date +%s) * 1000 )); cut=$((now - hours * 3600000)); n=0
+notify() { [ "${DRY_RUN:-0}" = 1 ] || [ ! -x /usr/local/bin/claude-notify ] || timeout 30 /usr/local/bin/claude-notify "$label reaper: $1" >/dev/null 2>&1 || true; }
+last_active() { # last_active <config dir> <sessionId> <startedAt ms> -> ms
+  local t; t=$(find "$1"/projects/*/"$2"* -type f -printf '%T@\n' 2>/dev/null | sort -n | tail -1)
+  if [ -n "$t" ]; then echo $(( ${t%.*} * 1000 )); else echo "$3"; fi
+}
+for f in /home/claude-agent/.claude{,-alt,-alt2}/sessions/*.json; do
+  [ -e "$f" ] || continue
+  pid=$(basename "$f" .json); [[ "$pid" =~ ^[0-9]+$ ]] && [ -d "/proc/$pid" ] || continue
+  tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q -- '--sdk-url' || continue
+  grep -q '/claude.slice/' "/proc/$pid/cgroup" 2>/dev/null || continue
+  read -r sid st0 ps < <(jq -r '"\(.sessionId) \(.startedAt // 0) \(.procStart // "")"' "$f" 2>/dev/null) || continue
+  [ "$ps" = "$(awk '{print $22}' "/proc/$pid/stat")" ] || continue   # pid reused: not this session
+  at=$(last_active "$(dirname "$(dirname "$f")")" "$sid" "$st0")
+  [ "$at" -lt "$cut" ] || continue
+  age=$(( (now - at) / 3600000 )); unit=$(sed -n 's#.*/claude.slice/##p' "/proc/$pid/cgroup")
+  if [ "${DRY_RUN:-0}" = 1 ]; then echo "would stop $pid ($unit, no activity ${age}h)"; continue; fi
+  pkill -TERM -P "$pid"
+  if kill -TERM "$pid"; then n=$((n + 1)); echo "stopped $pid ($unit, no activity ${age}h)"; notify "stopped idle session $pid ($unit), no activity for ${age}h"; fi
+done
+echo "reaper: $n stopped (no activity > ${hours}h)"
+
+# Tool jobs. A job root is either a Bash tool call (`bash -c source …/shell-snapshots/…`, live
+# session or not) or a process a tool call backgrounded whose shell already exited, so it was
+# reparented to init (anything with ppid 1 in claude.slice that is not its unit's main process or a
+# claude binary). Kill a root's whole tree after JOB_HOURS (default 2; ORPHAN_HOURS still works).
+# 2026-10-21: two `npm run verify` trees ran 7h. 2026-10-25: four `npm ci` under a live session ran
+# 7h and three backgrounded `tsx src/worker.ts` dev servers ran 36h; the slice sat at MemoryMax with
+# memory PSI full ~95%, every server froze in D state and the phone app got no answers.
+jh="${JOB_HOURS:-${ORPHAN_HOURS:-2}}"; k=0
+tree() { local c; for c in $(pgrep -P "$1"); do tree "$c"; done; echo "$1"; }
+roots() {
+  pgrep -u claude-agent -f 'shell-snapshots/snapshot-'
+  local p u
+  for p in $(pgrep -u claude-agent -P 1); do
+    u=$(sed -n 's#.*/claude.slice/##p' "/proc/$p/cgroup" 2>/dev/null); [ -n "$u" ] || continue
+    [ "$p" = "$(systemctl show -p MainPID --value "$u" 2>/dev/null)" ] && continue
+    readlink "/proc/$p/exe" 2>/dev/null | grep -q '/claude/versions/' && continue
+    echo "$p"
+  done
+}
+# 2026-10-27: never kill a tree that holds git (a commit, checkout or fetch cut in half corrupts the worktree
+# and its index; the job it belongs to finishes the git step on its own). Skipped trees are retried next run.
+has_git() { local p; for p in $(tree "$1"); do case "$(cat "/proc/$p/comm" 2>/dev/null)" in git|git-*) return 0;; esac; done; return 1; }
+what() { local c; c=$(pgrep -P "$1" | head -1); ps -o args= -p "${c:-$1}" 2>/dev/null | cut -c1-80; }
+kill_tree() { # kill_tree <pid> <reason>
+  if has_git "$1"; then echo "kept job $1 ($2): it contains git, not killed"; return; fi
+  if [ "${DRY_RUN:-0}" = 1 ]; then echo "would kill job $1 ($2): $(what "$1")"; return; fi
+  echo "killed job $1 ($2): $(what "$1")"; notify "killed tool job $1 ($2): $(what "$1")"
+  local t; t=$(tree "$1"); kill -TERM $t 2>/dev/null; k=$((k + 1))
+  # 2026-10-25: the tsx dev workers trap SIGTERM and never finish shutting down; KILL after 10s.
+  sleep 10; kill -KILL $t 2>/dev/null || true
+}
+for pid in $(roots | sort -un); do
+  et=$(ps -o etimes= -p "$pid" | tr -d ' '); [ -n "$et" ] && [ "$et" -gt $((jh * 3600)) ] || continue
+  kill_tree "$pid" "$((et / 3600))h old"
+done
+echo "reaper: $k tool job trees killed (older than ${jh}h)"
+
+# Pressure valve: whatever shape the next runaway takes, if the slice is stalled on memory
+# (PSI full avg60 >= PRESSURE_PCT, default 40) kill the largest tool job tree, whatever its age.
+pct="${PRESSURE_PCT:-40}"
+full=$(awk '/^full/ {split($3, a, "="); print int(a[2])}' /sys/fs/cgroup/claude.slice/memory.pressure 2>/dev/null)
+if [ "${full:-0}" -ge "$pct" ]; then
+  big=0; bigpid=""
+  for pid in $(roots | sort -un); do
+    has_git "$pid" && continue
+    rss=$(ps -o rss= -p "$(tree "$pid" | paste -sd,)" 2>/dev/null | awk '{s += $1} END {print s + 0}')
+    [ "$rss" -gt "$big" ] && big=$rss && bigpid=$pid
+  done
+  if [ -n "$bigpid" ]; then kill_tree "$bigpid" "slice memory pressure ${full}%, $((big / 1024))M"
+  else echo "reaper: slice memory pressure ${full}% but no tool job to kill"; fi
+fi

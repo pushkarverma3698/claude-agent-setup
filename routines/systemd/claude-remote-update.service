@@ -1,0 +1,6 @@
+[Unit]
+Description=Update claude-agent's native claude and restart idle, outdated Remote Control servers
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/claude-remote-update
