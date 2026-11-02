@@ -1,0 +1,8 @@
+#!/bin/bash
+# Fetch every repo in ~claude-agent/work. Written by setup-claude-remote; edit it there.
+rc=0
+for r in /home/claude-agent/work/*/; do
+  [ -d "$r.git" ] || continue
+  timeout 120 git -C "$r" fetch --prune --quiet || { echo "fetch failed: $r"; rc=1; }
+done
+exit $rc

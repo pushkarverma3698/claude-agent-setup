@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily clutter sweep (caches, old builds, rotated logs, stale scratch)
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=/usr/local/bin/claude-clutter-clean

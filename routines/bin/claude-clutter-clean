@@ -1,0 +1,60 @@
+#!/bin/bash
+# Daily clutter sweep (2026-10-21). Only regenerable data: caches, old builds,
+# rotated logs, stale scratch. /tmp is tmpfs, so files left there are RAM.
+# Written by setup-claude-remote on the founder's laptop; edit it there.
+# --dry-run (or DRY_RUN=1): list only the worktree, /opt/review and test-DB removals, change nothing.
+set -uo pipefail
+[ -r /etc/claude-routines/routines.env ] && . /etc/claude-routines/routines.env   # optional: HOST_LABEL, REVIEW_KEEP, TESTDB_CONTAINER (2026-11-02, was hard-coded)
+dry=0; { [ "${1:-}" = --dry-run ] || [ "${DRY_RUN:-0}" = 1 ]; } && dry=1
+A="sudo -u claude-agent"
+before=$(df --output=used -m / | tail -1)
+if [ $dry = 0 ]; then
+  $A -i npm cache clean --force >/dev/null 2>&1 || true
+  find /tmp /var/tmp -xdev -user claude-agent -type f -mmin +1440 ! -path '/tmp/cc-daemon-*' -delete 2>/dev/null
+  find /tmp /var/tmp -xdev -user claude-agent -mindepth 1 -type d -empty -mmin +1440 ! -path '/tmp/cc-daemon-*' -delete 2>/dev/null
+  # old native claude builds: keep the one ~/.local/bin/claude points at and the newest other
+  v=/home/claude-agent/.local/share/claude/versions; cur=$(readlink -f /home/claude-agent/.local/bin/claude)
+  ls -1t "$v" 2>/dev/null | while read -r f; do [ "$v/$f" = "$cur" ] || echo "$f"; done | tail -n +2 | while read -r f; do rm -r -- "${v:?}/$f"; done
+  find /var/log -type f \( -name '*.gz' -o -name '*.[0-9]' -o -name '*.old' \) -mtime +3 -delete
+  docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
+  docker image prune -f >/dev/null 2>&1 || true
+fi
+# Worktrees (2026-10-27): the routines' fixed-path ones (~/work/wt/*) and any session's own
+# (~/work/*/.claude/worktrees/*). Removed when older than 2 days and `worktree-holds --clean` says nothing in
+# them exists only on this disk (clean, every commit on a remote branch or in a PR head: a squash-merged
+# builder worktree counts, 2026-10-29). Dirty, locked or unpushed ones stay.
+safe_wt() { # safe_wt <worktree>
+  local w=$1
+  [ -d "$w" ] && [ -n "$(find "$w" -maxdepth 0 -mtime +2)" ] || return 1
+  sudo -H -u claude-agent /usr/local/bin/worktree-holds --clean "$w" >/dev/null 2>&1
+}
+for wt in /home/claude-agent/work/wt/* /home/claude-agent/work/*/.claude/worktrees/*; do
+  safe_wt "$wt" || continue
+  c=$($A git -C "$wt" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || continue
+  if [ $dry = 1 ]; then echo "would remove worktree $wt"; continue; fi
+  $A git -C "${c%/.git}" worktree remove "$wt" >/dev/null 2>&1 && echo "removed worktree $wt"
+  $A git -C "${c%/.git}" worktree prune >/dev/null 2>&1
+done
+# PR review checkouts: everything but the names in REVIEW_KEEP (space separated), once older than 2 days.
+for d in /opt/review/*; do
+  [ -d "$d" ] || continue
+  case " ${REVIEW_KEEP:-} " in *" $(basename "$d") "*) continue;; esac
+  [ -n "$(find "$d" -maxdepth 0 -mtime +2)" ] || continue
+  if [ $dry = 1 ]; then echo "would remove review checkout $d"; else rm -r -- "$d" && echo "removed review checkout $d"; fi
+done
+# Builder test DBs (2026-10-29): app_test_<suffix> in the TESTDB_CONTAINER postgres (unset: skipped), one per builder, never
+# dropped by their creators. Dropped when no worktree name contains <suffix> (_ also read as -) and nobody
+# is connected. app_test_ci* belongs to bh-ci, which drops its own.
+wts=$($A sh -c 'ls -1 /home/claude-agent/work/wt /home/claude-agent/work/*/.claude/worktrees 2>/dev/null' | tr 'A-Z' 'a-z')
+psqlq() { docker exec "${TESTDB_CONTAINER:-none}" psql -U app -d postgres -Atq "$@"; }
+dbs=$(psqlq -c "select datname from pg_database where datname like 'app\_test\_%' and datname not like 'app\_test\_ci%'" 2>/dev/null) || dbs=
+for db in $dbs; do
+  case "$db" in *[!a-z0-9_]*) continue;; esac
+  suf=${db#app_test_}
+  [ -n "$suf" ] || continue
+  printf '%s\n' "$wts" | grep -qF -e "$suf" -e "${suf//_/-}" && continue
+  [ "$(psqlq -c "select count(*) from pg_stat_activity where datname='$db'")" = 0 ] || continue
+  if [ $dry = 1 ]; then echo "would drop test db $db"; continue; fi
+  psqlq -c "drop database \"$db\"" >/dev/null 2>&1 && echo "dropped test db $db"
+done
+[ $dry = 1 ] && echo "clutter-clean: dry run, nothing removed" || echo "clutter-clean: freed $(( before - $(df --output=used -m / | tail -1) ))M on /"

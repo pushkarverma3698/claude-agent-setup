@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly claude update for the Remote Control servers
+
+[Timer]
+OnCalendar=*-*-* 21:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

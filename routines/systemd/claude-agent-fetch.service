@@ -1,0 +1,9 @@
+[Unit]
+Description=Fetch every repo in ~claude-agent/work so new worktrees branch from a fresh origin
+
+[Service]
+Type=oneshot
+Slice=claude.slice
+User=claude-agent
+Environment=HOME=/home/claude-agent
+ExecStart=/usr/local/bin/claude-agent-fetch

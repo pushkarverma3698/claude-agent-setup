@@ -1,0 +1,85 @@
+#!/bin/bash
+# routine-worktree add <clone> <path> <branch> <base>   a fresh worktree of <clone> at <path> (under ~/work/wt) on <branch>
+#                                                       cut from <base> (e.g. origin/production); node_modules linked to the clone's
+# routine-worktree clean <name>                         remove ~/work/wt/<name> and ~/work/wt/<name>-* (a run's lead and builders)
+# routine-worktree sweep <days> <dir>…                  remove each linked worktree (or /opt/review clone) that is older than
+#                                                       <days>, clean, and has no commit missing from GitHub (claude-clutter-clean)
+# Written by setup-claude-routines on the founder's laptop; edit it there.
+# 2026-10-27: replaces `claude -w` and `isolation: worktree`. A session started in a folder made by `git worktree add` has no
+# command fence (docs worktrees.md / agent-view.md), so agents run plain git, gh and npm. A worktree whose work is not on
+# GitHub is never removed: it is moved to ~/work/wt/kept-* and left for a person.
+set -euo pipefail
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
+W=/home/claude-agent/work/wt
+stamp=$(date -u +%Y%m%d-%H%M)
+
+unsaved() { # unsaved <dir>: 0 = something here is not on GitHub (uncommitted files, or a commit GitHub does not have)
+  local d=$1 sha
+  [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && return 0
+  sha=$(git -C "$d" rev-parse HEAD 2>/dev/null) || return 0
+  [ "$(git -C "$d" rev-list --count HEAD --not --remotes 2>/dev/null || echo 1)" -eq 0 ] && return 1
+  # A squash-merged branch is gone from origin but GitHub still holds its commits (refs/pull/N/head): fetch by SHA proves it.
+  timeout 40 git -C "$d" fetch -q origin "$sha" >/dev/null 2>&1 && return 1
+  return 0
+}
+age_days() { # age_days <dir>: days since the newest of the folder, HEAD and index changed
+  local d=$1 g n t=0 f
+  g=$(git -C "$d" rev-parse --absolute-git-dir 2>/dev/null) || { echo 0; return; }
+  for f in "$d" "$g/HEAD" "$g/index" "$g/FETCH_HEAD"; do
+    n=$(stat -c %Y "$f" 2>/dev/null || echo 0); [ "$n" -gt "$t" ] && t=$n
+  done
+  echo $(( ($(date +%s) - t) / 86400 ))
+}
+drop() { # drop <worktree dir>: remove it and its local branch
+  local d=$1 common repo b
+  common=$(git -C "$d" rev-parse --path-format=absolute --git-common-dir); repo=${common%/.git}
+  b=$(git -C "$d" symbolic-ref -q --short HEAD || true)
+  git -C "$repo" worktree remove --force "$d"
+  git -C "$repo" worktree prune
+  [ -z "$b" ] || git -C "$repo" branch -D "$b" >/dev/null 2>&1 || true
+}
+keep_aside() { # keep_aside <worktree dir>: out of the way of the next run, still on disk
+  local d=$1 repo
+  repo=$(git -C "$d" rev-parse --path-format=absolute --git-common-dir); repo=${repo%/.git}
+  git -C "$repo" worktree move "$d" "$W/kept-$(basename "$d")-$stamp"
+  echo "kept $d as $W/kept-$(basename "$d")-$stamp: it holds work that is not on GitHub"
+}
+
+case "${1:-}" in
+add)
+  [ $# -eq 5 ] || { echo "usage: routine-worktree add <clone> <path> <branch> <base>" >&2; exit 64; }
+  clone=$2 path=$3 branch=$4 base=$5
+  case $path in "$W"/*) ;; *) echo "routine-worktree: path must be under $W" >&2; exit 64;; esac
+  [ -d "$clone/.git" ] || { echo "routine-worktree: $clone is not a clone" >&2; exit 64; }
+  if [ -e "$path" ]; then # a rerun for the same task: a worktree with nothing unsaved is replaced, anything else stops the run
+    unsaved "$path" && { echo "routine-worktree: $path has work that is not on GitHub; push it or pick another path" >&2; exit 1; }
+    drop "$path"
+  fi
+  git -C "$clone" worktree prune
+  git -C "$clone" worktree add -q --no-track -B "$branch" "$path" "$base"
+  if [ -d "$clone/node_modules" ] && [ ! -e "$path/node_modules" ]; then
+    ln -s "$clone/node_modules" "$path/node_modules"
+    ex=$(git -C "$path" rev-parse --git-path info/exclude)
+    grep -qx '/node_modules' "$ex" 2>/dev/null || echo '/node_modules' >>"$ex"
+  fi
+  echo "$path"
+  ;;
+clean)
+  [ -n "${2:-}" ] || { echo "usage: routine-worktree clean <name>" >&2; exit 64; }
+  for d in "$W/$2" "$W/$2"-*; do
+    [ -e "$d/.git" ] || continue
+    if unsaved "$d"; then keep_aside "$d"; else drop "$d"; echo "removed $d"; fi
+  done
+  ;;
+sweep)
+  days=${2:?usage: routine-worktree sweep <days> <dir>…}; shift 2
+  for d in "$@"; do
+    [ -e "$d/.git" ] || continue
+    [ "$(age_days "$d")" -ge "$days" ] || continue
+    if unsaved "$d"; then echo "keep $d: not clean or has commits GitHub does not have"; continue; fi
+    if [ -f "$d/.git" ]; then drop "$d"; else rm -r -- "${d:?}"; fi # a linked worktree, or a full clone under /opt/review
+    echo "removed $d"
+  done
+  ;;
+*) echo "usage: routine-worktree add|clean|sweep (see the header)" >&2; exit 64 ;;
+esac
