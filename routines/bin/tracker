@@ -90,7 +90,7 @@ def load_conf(args, project_hint=""):
          "STATUS_COL": "Status", "DEPS_COL": "Depends on", "ORDER_COLS": "Milestone", "LEASE_HOURS": "6", "MAX_BUILDERS": "3", "NOTIFY_CMD": "claude-notify"}
     if c.get("ISSUE_IMPORT") == "1":  # the queue is GitHub issues: rows are `#<number>`
         d |= {"ID_RE": r"#\d+", "BLOCK_COL": "Blocked by", "BLOCK_RE": r"\S.*", "ISSUE_REPO": c["CODE_REPO"],
-              "ISSUE_STATUS": "agent:blocked=Blocked,agent:ready=Not started,agent:working=Not started,*=Waiting"}
+              "ISSUE_STATUS": "agent:blocked=Blocked,agent:ready=Not started,agent:working=Not started"}
     for k, v in d.items():
         c.setdefault(k, v)
     if c.get("ISSUE_IMPORT") == "1":
@@ -459,7 +459,7 @@ def summary(t, rec):
 
 BLOCKED_BY = re.compile(r"^[\s*_>-]*blocked by[\s:*_]*(.*)$", re.I | re.M)
 ISSUE_REF = re.compile(r"(?:\b([\w.-]+/[\w.-]+))?#(\d+)")
-CAN_RELABEL = {"Not started", "Waiting", "Blocked"}
+CAN_RELABEL = {"Not started", "Blocked"}  # Waiting is active: a holderless Waiting row is a leftover, not relabelable
 
 
 class IssueStates:
@@ -492,7 +492,7 @@ def apply_issue_import(t, open_issues, states):
     """GitHub issues are the truth: add rows for new open issues, Done for closed ones, keep only open blockers in the dep columns."""
     cfg, changes, idc = t.cfg, [], t.cfg["ID_COL"]
     rows = {t.get(r, idc): r for r in t.id_rows()}
-    label_status = lambda labels: next((st for key, st in cfg["issue_status"] if key == "*" or key in labels), None)
+    label_of = lambda labels: next(((key, st) for key, st in cfg["issue_status"] if key == "*" or key in labels), (None, None))
     is_open = {f"#{i['number']}" for i in open_issues}
     for task, rec in rows.items():
         if task not in is_open and t.status(rec) != "Done" and states.of(cfg["ISSUE_REPO"]).get(int(task[1:])) == "closed":
@@ -500,7 +500,7 @@ def apply_issue_import(t, open_issues, states):
             t.setmany(rec, Status="Done", Updated=stamp(), **{"Next step": "", "Blocker": ""})
     for i in sorted(open_issues, key=lambda i: i["number"]):
         task, labels = f"#{i['number']}", {l["name"].lower() for l in i.get("labels", [])}
-        want = label_status(labels)
+        key, want = label_of(labels)
         rec = rows.get(task)
         if rec is None:
             if want is None:
@@ -511,6 +511,8 @@ def apply_issue_import(t, open_issues, states):
             t.recs.append(rec)
             for col, val in ((idc, task), (cfg["TITLE_COL"], i["title"]), ("Status", want)):
                 t.set(rec, col, val)
+            if want == "Blocked":
+                t.set(rec, "Blocker", f"issue label {key}")
             rec.dirty = True
             changes.append(f"{task} added ({want})")
         else:
@@ -519,6 +521,8 @@ def apply_issue_import(t, open_issues, states):
             if want and want != t.status(rec) and t.status(rec) in CAN_RELABEL and not t.get(rec, "Holder"):
                 changes.append(f"{task} {t.status(rec)} -> {want} (label)")
                 t.set(rec, "Status", want)
+                if want == "Blocked" and not t.get(rec, "Blocker"):
+                    t.set(rec, "Blocker", f"issue label {key}")
         same, other = issue_blockers(cfg, i.get("body"), states)
         for col, new, word in ((cfg["DEPS_COL"], same, "depends on"), (cfg["BLOCK_COL"], other, "blocked by")):
             if re.findall(r"\S+#\d+|#\d+", t.get(rec, col)) != new:
@@ -535,7 +539,7 @@ def cmd_sync(cfg, a, quiet=False):
     states = IssueStates()
 
     def fn(t):
-        c = apply_sync(t, prs) + (apply_issue_import(t, issues, states) if imp else [])
+        c = (apply_issue_import(t, issues, states) if imp else []) + apply_sync(t, prs)  # import first, so a merged Closes settles in one sync
         return bool(c), c
     changes, _ = mutate(cfg, f"tracker: sync ({identity(cfg)[2]})", fn)
     if not quiet:

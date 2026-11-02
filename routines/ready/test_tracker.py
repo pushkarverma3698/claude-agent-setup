@@ -570,11 +570,12 @@ class IssueImport(Sandbox):
         before = readf(os.path.join(self.fake, "tracker.csv")).splitlines(True)[1]
         r = self.tracker("sync")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(r.stdout.splitlines(), ["#246 added (Not started)", "#250 added (Waiting)", "#251 added (Blocked)"])
+        self.assertEqual(r.stdout.splitlines(), ["#246 added (Not started)", "#251 added (Blocked)"])
         rows = self.rows()
         self.assertEqual((rows["#246"]["Title"], rows["#246"]["Status"], rows["#246"]["Holder"], rows["#246"]["Milestone"]), ("New ready", "Not started", "", ""))
-        self.assertEqual(rows["#250"]["Status"], "Waiting")
+        self.assertNotIn("#250", rows)  # no mapped label: not agent work, not imported
         self.assertEqual(rows["#251"]["Status"], "Blocked")  # first label in map order wins, not first label on the issue
+        self.assertEqual(rows["#251"]["Blocker"], "issue label agent:blocked")
         self.assertEqual(readf(os.path.join(self.fake, "tracker.csv")).splitlines(True)[1], before)
         self.assertEqual(self.log("gh.log").count("-X PUT"), 1)
         again = self.tracker("sync")
@@ -586,8 +587,8 @@ class IssueImport(Sandbox):
         self.issues(open=[(244, "Still open", [], "")], closed=[(241, "a", [], ""), (242, "b", [], ""), (243, "c", [], "")])
         r = self.tracker("sync")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(sorted(r.stdout.splitlines()), ["#241 Done (issue closed)", "#242 Done (issue closed)", "#244 Not started -> Waiting (label)"])
-        self.assertEqual([self.rows()[k]["Status"] for k in ("#241", "#242", "#243", "#244")], ["Done", "Done", "Done", "Waiting"])
+        self.assertEqual(sorted(r.stdout.splitlines()), ["#241 Done (issue closed)", "#242 Done (issue closed)"])
+        self.assertEqual([self.rows()[k]["Status"] for k in ("#241", "#242", "#243", "#244")], ["Done", "Done", "Done", "Not started"])
 
     def test_22_label_status_never_overwrites_a_held_or_active_row(self):
         self.put([row("#1", status="Building", Holder="x:y:z", Updated=ago(1)), row("#2", status="Not started", Holder="x:y:z"),
@@ -597,8 +598,8 @@ class IssueImport(Sandbox):
         r = self.tracker("sync")
         self.assertEqual(r.returncode, 0, r.stderr)
         got = {k: v["Status"] for k, v in self.rows().items()}
-        self.assertEqual(got, {"#1": "Building", "#2": "Not started", "#3": "In review", "#4": "Claimed", "#5": "Blocked", "#6": "Blocked"})
-        self.assertEqual(sorted(r.stdout.splitlines()), ["#5 Not started -> Blocked (label)", "#6 Waiting -> Blocked (label)"])
+        self.assertEqual(got, {"#1": "Building", "#2": "Not started", "#3": "In review", "#4": "Claimed", "#5": "Blocked", "#6": "Waiting"})
+        self.assertEqual(sorted(r.stdout.splitlines()), ["#5 Not started -> Blocked (label)"])
 
     def test_23_blockers_split_same_repo_and_cross_repo_closed_dropped(self):
         self.conf_extra = "ISSUE_IMPORT=1\nISSUE_REPO=acme/app\n"
@@ -636,6 +637,15 @@ class IssueImport(Sandbox):
         self.assertEqual(out[0], "NEXT NEW #8")
         self.assertIn("NOT READY #7 | blocked by acme/api#245", out)
         self.assertEqual(self.tracker("claim", "#7").returncode, 2)
+
+    def test_27_one_sync_imports_then_applies_merged_closes(self):
+        self.put([row("#1", status="Done")])
+        self.issues(open=[(46, "Fixed on beta", ["agent:ready"], "")])
+        writef(os.path.join(self.fake, "prs.json"), json.dumps([{"number": 178, "headRefName": "task/issue-46-fix", "mergedAt": "2026-10-30T10:00:00Z", "body": "Closes #46\n"}]))
+        r = self.tracker("sync")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.rows()["#46"]["Status"], "Done")
+        self.assertEqual(self.tracker("sync").stdout.strip(), "nothing to sync")
 
     def test_26_without_issue_import_sync_ignores_issues(self):
         self.conf_extra = ""
