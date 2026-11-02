@@ -4,7 +4,8 @@ Hooks, routines and helper scripts for running Claude Code (and other coding age
 
 ## What is here
 
-- `token-guard.py`: PreToolUse/SessionStart hook. On the VPS it runs in full mode; on a laptop it runs with `--pr-only`, where it checks PR bases, PR bodies and merge targets. Before every non-delete `git push`, in any repo, it runs `tracker check` in the push dir and refuses the push when the session was taken over (exit 5) or the check fails or times out (fail closed); it skips this when `tracker` is not installed. It reads per-repo rules from `routine-policy.defaults.json`, overlaid by `routine-policy.json`. The rules live in `token_guard/` (one module per concern); `token-guard.py` only routes each event to them, so install copies both: `token-guard.py` and the `token_guard/` directory go side by side, and the hook refuses every call (exit 2) if the directory is missing. Tests: `./test-token-guard.sh`, and `./test-token-guard-golden.sh`, which replays every call that suite makes plus a few direct ones and requires the exit code, stdout and stderr to match `testdata/token-guard.golden` byte for byte.
+- `token-guard.py`: PreToolUse/SessionStart hook. On the VPS it runs in full mode; on a laptop it runs with `--pr-only`, where it checks PR bases, PR bodies and merge targets. Before every non-delete `git push`, in any repo, it runs `tracker check` in the push dir and refuses the push when the session was taken over (exit 5) or the check fails or times out (fail closed); it skips this when `tracker` is not installed. It reads per-repo rules from `routine-policy.defaults.json`, overlaid by `routine-policy.json`. The rules live in `token_guard/` (one module per concern); `token-guard.py` only routes each event to them, so install copies both: `token-guard.py` and the `token_guard/` directory go side by side, and the hook refuses every call (exit 2) if the directory is missing. Tests: `claude-remote-hooks/test-token-guard.sh`, and `claude-remote-hooks/test-token-guard-golden.sh`, which replays every call that suite makes plus a few direct ones and requires the exit code, stdout and stderr to match `testdata/token-guard.golden` byte for byte.
+- `guard-bash.sh` (in `claude-remote-hooks/`): laptop PreToolUse(Bash) hook that blocks a recursive force-delete and a direct `git push` to `main`/`master`. Needs `jq`.
 - `routine-policy`: builds those rules from the `GUARD_REPOS` lines in your routine confs. `--install` writes them to the laptop and the VPS.
 - `setup-claude-routines`, `routine-new`, `routine-verdict`, `routines/`: daily VPS routines driven by systemd timers, with a verdict message afterwards.
 - `session-brief`: SessionStart hook that prints repo state, open PRs and, optionally, recent brain memories.
@@ -13,16 +14,68 @@ Hooks, routines and helper scripts for running Claude Code (and other coding age
 - `agy`, `agy-guard`, `agent-dispatch`: dispatch work to Google Antigravity, and refuse to start when another agent is writing.
 - `pr-brain`, `branch-sweep`, `claude-notify`: PR review sweeper, stale-branch cleanup, Telegram notifications.
 
-## Setup
+## Laptop install: hooks and skills
+
+Needs `git`, `python3`, `jq` and `gh`. No VPS needed. Run from the clone:
+
+```bash
+git clone https://github.com/pushkarverma3698/claude-agent-setup && cd claude-agent-setup
+mkdir -p ~/.claude/hooks ~/.claude/skills
+install -m 755 claude-remote-hooks/token-guard.py claude-remote-hooks/guard-bash.sh ~/.claude/hooks/
+[ ! -d ~/.claude/hooks/token_guard ] || rm -r ~/.claude/hooks/token_guard
+cp -R claude-remote-hooks/token_guard ~/.claude/hooks/   # must sit next to token-guard.py
+cp -R skills/work-the-tracker ~/.claude/skills/
+```
+
+Register the hooks in `~/.claude/settings.json`. With no settings file yet, this writes one (the clone path is filled in for `session-brief`); with an existing file, merge its `hooks` key by hand:
+
+```bash
+[ -e ~/.claude/settings.json ] && echo "settings.json exists: merge the hooks key by hand" || cat > ~/.claude/settings.json <<JSON
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "\$HOME/.claude/hooks/guard-bash.sh", "timeout": 5},
+        {"type": "command", "command": "\$HOME/.claude/hooks/token-guard.py --pr-only", "timeout": 30}]},
+      {"matcher": "Agent|Task", "hooks": [
+        {"type": "command", "command": "\$HOME/.claude/hooks/token-guard.py --pr-only", "timeout": 30}]}
+    ],
+    "SessionStart": [
+      {"matcher": "startup|clear", "hooks": [
+        {"type": "command", "command": "$PWD/session-brief", "timeout": 8}]}
+    ]
+  }
+}
+JSON
+```
+
+Check it works (the second line must print BLOCKED and exit 2):
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | ~/.claude/hooks/token-guard.py --pr-only; echo "exit=$?"
+echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | ~/.claude/hooks/guard-bash.sh; echo "exit=$?"
+```
+
+Per-repo PR rules come from `~/.claude/hooks/routine-policy.json`. Without it the guard has no repo rules and lets PR calls through. To write it on the laptop only, from your routine confs (format in `examples/claude-routines/`):
+
+```bash
+ROUTINE_CONF_DIR=<your confs> ./routine-policy > ~/.claude/hooks/routine-policy.json
+cp ~/.claude/hooks/routine-policy.json ~/.claude/hooks/routine-policy.defaults.json
+```
+
+`tracker`, `claim-branch` and the `work-the-tracker` skill need `routines/bin` on your `PATH` and a tracker conf (see "Tracker").
+
+## VPS setup: routines
 
 1. Copy `examples/agent-setup.env` to `~/.config/claude-agent-setup/env` and fill it in. `AGENT_RULES_HOST` is required.
 2. Keep your private routine confs in an overlay directory (`AGENT_OVERLAY_DIR`). `examples/claude-routines/` shows the layout.
-3. Run `./routine-policy --install`, then `./setup-claude-routines`.
+3. Run `./routine-policy --install` (writes the guard policy to the laptop and over ssh to `AGENT_RULES_HOST`; it fails without a reachable host), then `./setup-claude-routines`.
 
 ## Tests
 
 ```bash
-./test-token-guard.sh
+./claude-remote-hooks/test-token-guard.sh
+./claude-remote-hooks/test-token-guard-golden.sh
 python3 routines/ready/test_claim_branch.py
 python3 routines/ready/test_tracker.py
 python3 routines/ready/test_routine_fixes.py   # some cases need GNU tools (run on Linux)
