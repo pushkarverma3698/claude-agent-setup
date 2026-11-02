@@ -1,5 +1,5 @@
 #!/bin/sh
-# agy — dispatch/track wrapper around Google Antigravity's agentapi.
+# agy — dispatch/track/loop wrapper around Google Antigravity's agentapi.
 #
 # Local dev tool only. Antigravity's language_server binds its gRPC address
 # to an ephemeral port and mints a fresh CSRF token on every restart, so both
@@ -8,7 +8,10 @@
 
 set -eu
 
-AGENTAPI="$HOME/.gemini/antigravity/bin/agentapi"
+AGENTAPI="${AGY_AGENTAPI_BIN:-$HOME/.gemini/antigravity/bin/agentapi}"
+BRAIN_DIR="${AGY_BRAIN_DIR:-$HOME/.gemini/antigravity/brain}"
+LEDGER_DIR="${AGY_LEDGER_DIR:-$HOME/.gemini/antigravity/conversations}"
+PROJECTS_DIR="${AGY_PROJECTS_DIR:-$HOME/.gemini/config/projects}"
 LS_MATCH="Antigravity.app/Contents/Resources/bin/language_server"
 
 die() {
@@ -28,11 +31,6 @@ find_csrf() {
   ps -o command= -p "$1" | sed -n 's/.*--csrf_token \([^ ]*\).*/\1/p'
 }
 
-# Probe every LISTEN port on the language_server PID in parallel and return
-# the first that answers the Antigravity RPC protocol. Wrong ports fail fast
-# with a transport-level "connection error" (frame-too-large / EOF); the
-# right one returns a normal RPC-level error ("trajectory not found") because
-# the probe conversation id doesn't exist. That distinction is the signal.
 find_port() {
   pid="$1"
   csrf="$2"
@@ -58,7 +56,59 @@ find_port() {
   echo "$found"
 }
 
+resolve_project_id() {
+  explicit="${1:-${AGY_PROJECT_ID:-${ANTIGRAVITY_PROJECT_ID:-}}}"
+  if [ -n "$explicit" ] && [ -d "$PROJECTS_DIR" ]; then
+    # Allow either a UUID or a project name in ~/.gemini/config/projects/*.json
+    by_name=$(jq -rs --arg q "$explicit" '.[] | select(.id == $q or .name == $q) | .id' "$PROJECTS_DIR"/*.json 2>/dev/null | head -1 || true)
+    if [ -n "$by_name" ]; then
+      echo "$by_name"
+      return 0
+    fi
+  fi
+  if [ -n "$explicit" ]; then
+    echo "$explicit"
+    return 0
+  fi
+  if [ ! -d "$PROJECTS_DIR" ]; then
+    echo ""
+    return 0
+  fi
+  common_git=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  repo_root="$PWD"
+  if [ -n "$common_git" ]; then
+    repo_root="${common_git%/.git}"
+  fi
+  resolved=$(jq -rs --arg uri "file://$repo_root" --arg name "$(basename "$repo_root")" '
+    [
+      .[] |
+      ((.projectResources.resources // []) | map(.gitFolder.folderUri // .folderUri // empty) | .[0] // "") as $p_uri |
+      if ($p_uri != "" and $p_uri == $uri) then {id: .id, score: 1000}
+      elif (.name == $name) then {id: .id, score: 900}
+      elif ($p_uri != "" and ($uri | startswith($p_uri + "/"))) then {id: .id, score: ($p_uri | length)}
+      else empty end
+    ] | sort_by(-.score) | .[0].id // empty
+  ' "$PROJECTS_DIR"/*.json 2>/dev/null || true)
+  if [ -z "$resolved" ]; then
+    resolved="outside-of-project"
+  fi
+  echo "$resolved"
+}
+
 resolve() {
+  proj_override="${1:-}"
+  resolved_pid=$(resolve_project_id "$proj_override")
+  # Scrub caller conversation/source metadata so cross-project or external calls never fail
+  # with "source project_id does not match target project_id".
+  unset ANTIGRAVITY_SOURCE_METADATA ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_TRAJECTORY_ID ANTIGRAVITY_AGENT || true
+  if [ -n "$resolved_pid" ]; then
+    export ANTIGRAVITY_PROJECT_ID="$resolved_pid"
+  fi
+  if [ "${AGY_SKIP_LS_PROBE:-0}" = "1" ]; then
+    export ANTIGRAVITY_LS_ADDRESS="${ANTIGRAVITY_LS_ADDRESS:-127.0.0.1:0}"
+    export ANTIGRAVITY_CSRF_TOKEN="${ANTIGRAVITY_CSRF_TOKEN:-test-csrf}"
+    return 0
+  fi
   pid=$(find_pid || true)
   [ -n "$pid" ] || die "Antigravity is not running (no language_server process found). Launch Antigravity.app first."
   csrf=$(find_csrf "$pid")
@@ -68,38 +118,127 @@ resolve() {
   export ANTIGRAVITY_CSRF_TOKEN="$csrf"
 }
 
+transcript_file() {
+  conv_id="$1"
+  tf="$BRAIN_DIR/$conv_id/.system_generated/logs/transcript_full.jsonl"
+  if [ -f "$tf" ]; then
+    echo "$tf"
+  else
+    echo "$BRAIN_DIR/$conv_id/.system_generated/logs/transcript.jsonl"
+  fi
+}
+
+max_step_index() {
+  tf=$(transcript_file "$1")
+  if [ ! -f "$tf" ]; then
+    echo "-1"
+    return 0
+  fi
+  last=$(grep -v '^[[:space:]]*$' "$tf" 2>/dev/null | tail -1 || true)
+  if [ -z "$last" ]; then
+    echo "-1"
+    return 0
+  fi
+  printf '%s\n' "$last" | jq -r '.step_index // -1' 2>/dev/null || echo "-1"
+}
+
+cmd_reply() {
+  conv_id="${1:-}"
+  [ -n "$conv_id" ] || die "usage: agy reply <conversation_id>"
+  tf=$(transcript_file "$conv_id")
+  [ -f "$tf" ] || die "no transcript found for conversation $conv_id at $tf"
+  last=$(grep -v '^[[:space:]]*$' "$tf" 2>/dev/null | tail -1 || true)
+  [ -n "$last" ] || die "transcript for conversation $conv_id is empty"
+  is_done=$(printf '%s\n' "$last" | jq -r '
+    if (.type == "PLANNER_RESPONSE" and .status == "DONE" and ((.tool_calls // []) | length == 0) and (.content != null and .content != ""))
+    then "yes"
+    else "no"
+    end
+  ' 2>/dev/null || echo "no")
+  if [ "$is_done" != "yes" ]; then
+    echo "agy: conversation $conv_id is still mid-turn (use 'agy wait $conv_id')" >&2
+    exit 2
+  fi
+  printf '%s\n' "$last" | jq -r '.content'
+}
+
+cmd_wait() {
+  timeout_sec=1800
+  settle_sec=3
+  after_step=-1
+  conv_id=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --timeout=*) timeout_sec="${1#--timeout=}"; shift ;;
+      --settle=*) settle_sec="${1#--settle=}"; shift ;;
+      --after-step=*) after_step="${1#--after-step=}"; shift ;;
+      -*) die "unknown wait option: $1" ;;
+      *) conv_id="$1"; shift ;;
+    esac
+  done
+  [ -n "$conv_id" ] || die "usage: agy wait [--timeout=1800] [--settle=3] [--after-step=-1] <conversation_id>"
+
+  start_ts=$(date +%s)
+  poll_sec=2
+  if [ "$settle_sec" -le 1 ]; then
+    poll_sec=1
+  fi
+
+  while :; do
+    tf=$(transcript_file "$conv_id")
+    if [ -f "$tf" ]; then
+      last=$(grep -v '^[[:space:]]*$' "$tf" 2>/dev/null | tail -1 || true)
+      if [ -n "$last" ]; then
+        cand_idx=$(printf '%s\n' "$last" | jq -r --argjson after "$after_step" '
+          if (.type == "PLANNER_RESPONSE" and .status == "DONE" and ((.tool_calls // []) | length == 0) and (.content != null and .content != "") and ((.step_index // 0) > $after))
+          then (.step_index // 0)
+          else -1
+          end
+        ' 2>/dev/null || echo "-1")
+        if [ "$cand_idx" -ge 0 ]; then
+          sleep "$settle_sec"
+          last_after=$(grep -v '^[[:space:]]*$' "$tf" 2>/dev/null | tail -1 || true)
+          idx_after=$(printf '%s\n' "$last_after" | jq -r '.step_index // -2' 2>/dev/null || echo "-2")
+          if [ "$idx_after" = "$cand_idx" ]; then
+            printf '%s\n' "$last_after" | jq -r '.content'
+            return 0
+          fi
+        fi
+      fi
+    fi
+    now_ts=$(date +%s)
+    if [ $((now_ts - start_ts)) -ge "$timeout_sec" ]; then
+      echo "agy: timed out after ${timeout_sec}s waiting for conversation $conv_id" >&2
+      exit 124
+    fi
+    sleep "$poll_sec"
+  done
+}
+
 usage() {
   cat <<'EOF'
-agy — dispatch tasks to Google Antigravity from the terminal
+agy — dispatch and loop tasks with Google Antigravity from the terminal
 
 Usage:
-  agy new [--model=pro|flash|flash_lite] [--title=<title>] "<brief>"
-  agy send <conversation_id> "<message>"
-  agy status <conversation_id>              # conversation metadata (state, timestamps)
-  agy steps <conversation_id>                # step index/type/status from the local ledger
+  agy new [--wait] [--timeout=1800] [--project=<id|name>] [--model=pro|flash|flash_lite] [--title=<title>] "<brief>"
+  agy send [--wait] [--timeout=1200] [--title=<title>] <conversation_id> "<message>"
+  agy wait [--timeout=1800] [--settle=3] [--after-step=-1] <conversation_id>
+  agy reply <conversation_id>               # print completed turn's final message from transcript
+  agy status <conversation_id>              # conversation metadata (state, timestamps, projectId)
+  agy steps <conversation_id>               # step index/type/status from the local ledger
   agy raw <agentapi-subcommand> [args...]   # escape hatch — any agentapi call, address+token pre-resolved
 
-Address and CSRF token are rediscovered on every call — Antigravity assigns
-both fresh on each restart, so nothing here is cached.
-
-One agent per issue: `agy new` is refused while agy-guard reports another conversation writing, or when the brief
-names #N and origin already has task/issue-N. AGY_ALLOW_PARALLEL=1 overrides. PRs go to beta, never production;
-nothing merges or approves — the brief must say so (the delegated-task skill does).
-
-Review discipline: agy has no way to grade Antigravity's own output. Close
-every delegated task by reading `git diff` and running the brief's stated
-verify command yourself — never take Antigravity's summary as done.
+Address, CSRF token, and projectId are rediscovered on every call.
+Use --wait on `new` and `send` to block until the turn settles and print the close-out report.
 EOF
 }
 
 cmd_steps() {
   conv_id="${1:-}"
   [ -n "$conv_id" ] || die "usage: agy steps <conversation_id>"
-  db="$HOME/.gemini/antigravity/conversations/$conv_id.db"
+  db="$LEDGER_DIR/$conv_id.db"
   [ -f "$db" ] || die "no local ledger for conversation $conv_id at $db"
   command -v sqlite3 >/dev/null 2>&1 || die "sqlite3 not found on PATH"
-  # step_type/status are raw protobuf enum ints (undecoded — the payload
-  # blobs are protobuf, not text, so this is index/type/status only).
   sqlite3 -header -column "$db" "select idx, step_type, status from steps order by idx;"
 }
 
@@ -112,9 +251,19 @@ shift
 
 case "$sub" in
   new)
-    # One agent per issue, in code (2026-10-11: issues #115/#117/#119 were one bug worked three times). Refused while another
-    # Antigravity conversation is writing (agy-guard), or when the brief names an issue that already has a task/issue-N
-    # branch on origin. AGY_ALLOW_PARALLEL=1 overrides both, on purpose.
+    do_wait=0
+    wait_timeout=1800
+    wait_settle=3
+    proj_arg=""
+    for arg in "$@"; do
+      case "$arg" in
+        --wait) do_wait=1 ;;
+        --timeout=*) wait_timeout="${arg#--timeout=}" ;;
+        --settle=*) wait_settle="${arg#--settle=}" ;;
+        --project=*) proj_arg="${arg#--project=}" ;;
+      esac
+    done
+
     if [ "${AGY_ALLOW_PARALLEL:-0}" != 1 ]; then
       guard="$(dirname "$0")/agy-guard"
       if [ -x "$guard" ] && ! "$guard" >/dev/null 2>&1; then
@@ -128,22 +277,103 @@ case "$sub" in
         done
       done
     fi
-    resolve
-    "$AGENTAPI" new-conversation "$@"
+
+    resolve "$proj_arg"
+
+    # Strip agy-only flags before calling agentapi new-conversation
+    set -- "$@"
+    clean_args=""
+    # Rebuild positional parameters without --wait, --timeout=*, --settle=*, --project=*
+    i=1
+    total=$#
+    while [ "$i" -le "$total" ]; do
+      a="$1"
+      shift
+      case "$a" in
+        --wait|--timeout=*|--settle=*|--project=*) ;;
+        *) set -- "$@" "$a" ;;
+      esac
+      i=$((i + 1))
+    done
+
+    out=$("$AGENTAPI" new-conversation "$@")
+    err_msg=$(printf '%s\n' "$out" | jq -r '.error // empty' 2>/dev/null || true)
+    conv_id=$(printf '%s\n' "$out" | jq -r '.response.newConversation.conversationId // empty' 2>/dev/null || true)
+    if [ -n "$err_msg" ] || [ -z "$conv_id" ]; then
+      printf '%s\n' "$out" >&2
+      die "new-conversation failed${err_msg:+: $err_msg}"
+    fi
+
+    if [ "$do_wait" -eq 1 ]; then
+      echo "CONVERSATION_ID=$conv_id"
+      cmd_wait --timeout="$wait_timeout" --settle="$wait_settle" --after-step=0 "$conv_id"
+    else
+      printf '%s\n' "$out"
+    fi
     ;;
   send)
-    resolve
-    "$AGENTAPI" send-message "$@"
+    do_wait=0
+    wait_timeout=1200
+    wait_settle=3
+    i=1
+    total=$#
+    while [ "$i" -le "$total" ]; do
+      a="$1"
+      shift
+      case "$a" in
+        --wait) do_wait=1 ;;
+        --timeout=*) wait_timeout="${a#--timeout=}" ;;
+        --settle=*) wait_settle="${a#--settle=}" ;;
+        *) set -- "$@" "$a" ;;
+      esac
+      i=$((i + 1))
+    done
+
+    target_conv=""
+    for a in "$@"; do
+      case "$a" in
+        -*) ;;
+        *) target_conv="$a"; break ;;
+      esac
+    done
+    [ -n "$target_conv" ] || die "usage: agy send [--wait] [--timeout=1200] <conversation_id> \"<message>\""
+
+    prev_step=$(max_step_index "$target_conv")
+    resolve ""
+    # Try resolving projectId from target conversation metadata so cross-project send always matches
+    meta_pid=$("$AGENTAPI" get-conversation-metadata "$target_conv" 2>/dev/null | jq -r '.response.conversationMetadata.metadata.projectId // empty' 2>/dev/null || true)
+    if [ -n "$meta_pid" ]; then
+      export ANTIGRAVITY_PROJECT_ID="$meta_pid"
+    fi
+
+    out=$("$AGENTAPI" send-message "$@")
+    err_msg=$(printf '%s\n' "$out" | jq -r '.error // empty' 2>/dev/null || true)
+    if [ -n "$err_msg" ]; then
+      printf '%s\n' "$out" >&2
+      die "send-message failed: $err_msg"
+    fi
+
+    if [ "$do_wait" -eq 1 ]; then
+      cmd_wait --timeout="$wait_timeout" --settle="$wait_settle" --after-step="$prev_step" "$target_conv"
+    else
+      printf '%s\n' "$out"
+    fi
+    ;;
+  wait)
+    cmd_wait "$@"
+    ;;
+  reply)
+    cmd_reply "$@"
     ;;
   status)
-    resolve
+    resolve ""
     "$AGENTAPI" get-conversation-metadata "$@"
     ;;
   steps)
     cmd_steps "$@"
     ;;
   raw)
-    resolve
+    resolve ""
     "$AGENTAPI" "$@"
     ;;
   -h | --help | help)

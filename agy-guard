@@ -3,32 +3,77 @@
 # agy-guard — answer one question: is it safe to review Antigravity's work yet?
 # =============================================================================
 # Antigravity keeps one SQLite ledger per conversation in
-# ~/.gemini/antigravity/conversations/. Every agent turn writes to it, so the
-# newest ledger mtime is a reliable "an agent is still working" signal.
-#
-# Why this exists (2026-08-06):
-#   20:19  three conversations dispatched in parallel
-#   20:24  Antigravity reports done; the founder relays "it's done"
-#   20:27  Claude reviews the diff — 16 failing tests, no implementation
-#   20:36  the STILL-LIVE conversation reverts its own work byte-exact to HEAD
-#          and runs a full tsc rebuild to confirm a clean tree
-#   20:39  a ledger is still being written, 15 minutes after "done"
-#
-# The review at 20:27 described a state that stopped existing at 20:36, and
-# Claude's own edits at 20:38 were one write away from the same clobbering.
-# "Done" was a human relaying an agent's self-report while the agent still had
-# write access to the tree.
+# ~/.gemini/antigravity/conversations/ and a structured JSONL transcript in
+# ~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript_full.jsonl.
 #
 # Usage:
-#   agy-guard              # default 3-minute quiet window
-#   agy-guard 10           # require 10 minutes of silence
+#   agy-guard                          # default 3-minute quiet window across other conversations
+#   agy-guard 10                       # require 10 minutes of silence
+#   agy-guard --conv <id> [quiet_sec]  # check a specific conversation (turn complete + quiet_sec, default 5s)
 #
 # Exit 0 = idle, safe to review.  Exit 1 = still writing, do not review.
-# Designed to gate: `agy-guard && git add -A && git commit -m wip`
 
 set -euo pipefail
 
-readonly LEDGER_DIR="${HOME}/.gemini/antigravity/conversations"
+readonly LEDGER_DIR="${AGY_LEDGER_DIR:-${HOME}/.gemini/antigravity/conversations}"
+readonly BRAIN_DIR="${AGY_BRAIN_DIR:-${HOME}/.gemini/antigravity/brain}"
+
+mtime_epoch() {
+  stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || date +%s
+}
+
+check_conv() {
+  local conv_id="$1"
+  local quiet_sec="${2:-5}"
+  local tf="${BRAIN_DIR}/${conv_id}/.system_generated/logs/transcript_full.jsonl"
+  [ -f "$tf" ] || tf="${BRAIN_DIR}/${conv_id}/.system_generated/logs/transcript.jsonl"
+  local db="${LEDGER_DIR}/${conv_id}.db"
+
+  if [ ! -f "$tf" ] && [ ! -f "$db" ]; then
+    echo "agy-guard: IDLE — no ledger or transcript found for ${conv_id}."
+    exit 0
+  fi
+
+  if [ -f "$tf" ] && command -v jq >/dev/null 2>&1; then
+    local last_line state
+    last_line=$(grep -v '^[[:space:]]*$' "$tf" 2>/dev/null | tail -1 || true)
+    if [ -n "$last_line" ]; then
+      state=$(printf '%s\n' "$last_line" | jq -r '
+        if (.type == "PLANNER_RESPONSE" and .status == "DONE" and ((.tool_calls // []) | length == 0))
+        then "IDLE"
+        else "BUSY:\(.type // "unknown")/\(.status // "unknown")"
+        end
+      ' 2>/dev/null || echo "BUSY:parse_error")
+      if [ "$state" != "IDLE" ]; then
+        echo "agy-guard: BUSY — conversation ${conv_id} is mid-turn (${state#BUSY:})."
+        exit 1
+      fi
+    fi
+  fi
+
+  if [ "$quiet_sec" -gt 0 ]; then
+    local now age f
+    now=$(date +%s)
+    for f in "$tf" "$db"; do
+      [ -f "$f" ] || continue
+      age=$(( now - $(mtime_epoch "$f") ))
+      if [ "$age" -lt "$quiet_sec" ]; then
+        echo "agy-guard: BUSY — conversation ${conv_id} was written ${age}s ago (< ${quiet_sec}s quiet window)."
+        exit 1
+      fi
+    done
+  fi
+
+  echo "agy-guard: IDLE — conversation ${conv_id} completed its turn and is quiet."
+  exit 0
+}
+
+if [[ "${1:-}" == "--conv" ]]; then
+  conv="${2:-}"
+  [[ -n "$conv" ]] || { echo "usage: agy-guard --conv <conversation_id> [quiet_seconds]" >&2; exit 2; }
+  check_conv "$conv" "${3:-5}"
+fi
+
 readonly QUIET_MINUTES="${1:-3}"
 
 if [[ ! -d "${LEDGER_DIR}" ]]; then
@@ -37,11 +82,18 @@ if [[ ! -d "${LEDGER_DIR}" ]]; then
   exit 0
 fi
 
-# -newermt is the whole check: any ledger touched inside the quiet window means
-# some conversation is mid-turn, whichever one it is.
-# Newline-delimited string rather than an array: macOS ships bash 3.2, which has
-# no `mapfile` and errors on empty-array expansion under `set -u`.
-recent="$(find "${LEDGER_DIR}" -name '*.db' -newermt "-${QUIET_MINUTES} minutes" 2>/dev/null || true)"
+# Exclude the caller's own conversation ledger if invoked from inside Antigravity.
+self_db=""
+if [[ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ]]; then
+  self_db="${ANTIGRAVITY_CONVERSATION_ID}.db"
+fi
+
+recent=""
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
+  [[ -n "$self_db" && "$(basename "$f")" == "$self_db" ]] && continue
+  recent="${recent:+$recent$'\n'}$f"
+done < <(find "${LEDGER_DIR}" -name '*.db' -newermt "-${QUIET_MINUTES} minutes" 2>/dev/null || true)
 
 if [[ -z "${recent}" ]]; then
   echo "agy-guard: IDLE — no conversation ledger written in ${QUIET_MINUTES}m."
@@ -53,8 +105,7 @@ count="$(printf '%s\n' "${recent}" | wc -l | tr -d ' ')"
 echo "agy-guard: BUSY — ${count} conversation(s) written in the last ${QUIET_MINUTES}m."
 echo
 while IFS= read -r ledger; do
-  # stat -f is BSD/macOS; this script is laptop-only by design (so is Antigravity).
-  printf '  %s  %s\n' "$(stat -f '%Sm' -t '%H:%M:%S' "${ledger}")" "$(basename "${ledger}")"
+  printf '  %s  %s\n' "$(stat -f '%Sm' -t '%H:%M:%S' "${ledger}" 2>/dev/null || stat -c '%y' "${ledger}" 2>/dev/null)" "$(basename "${ledger}")"
 done <<< "${recent}"
 echo
 echo "  DO NOT review or edit the working tree yet. A live conversation can still"
