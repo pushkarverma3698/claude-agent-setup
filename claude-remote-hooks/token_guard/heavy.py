@@ -12,7 +12,7 @@ HEAVY = re.compile(
     r"(?:"
     r"(?:npm|pnpm|yarn|bun)(?:\s+-\S+(?:\s+[^\s-]\S*)?){0,3}\s+(?:run\s+)?"
     r"(?:verify|gate|predeploy|test|test:\S+|lint|lint:\S+|typecheck|check|build|e2e|ci|install|i)\b"
-    r"|npx\s+(?:tsc|eslint|vitest|jest|playwright|next\s+build)\b"
+    r"|(?:npx|(?:npm|pnpm|yarn|bun)\s+exec)(?:\s+-\S+)*\s+(?:tsc|eslint|vitest|jest|playwright|next\s+build)\b"
     r"|(?:\./)?node_modules/\.bin/(?:tsc|eslint|vitest|jest)\b"
     r"|(?:tsc|eslint|vitest|jest)(?:\s|$)"
     r"|docker\s+(?:compose\s+)?build\b"
