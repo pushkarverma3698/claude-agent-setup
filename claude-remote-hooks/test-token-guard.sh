@@ -19,6 +19,7 @@ run() { # run <expect: deny|allow|wrap|ctx> <json>
     deny) [ $rc -eq 2 ] ;;
     allow) [ $rc -eq 0 ] && [ -z "$out" ] ;;
     wrap) [ $rc -eq 0 ] && grep -q 'merge refused' <<<"$out" ;;
+    heavy) [ $rc -eq 0 ] && grep -q 'heavy-slot' <<<"$out" ;;
     ctx) [ $rc -eq 0 ] && grep -q 'Keep going' <<<"$out" && ! grep -qi 'stop' <<<"$out" ;;
   esac && echo "ok   $1  $3" || { echo "FAIL $1  $3 (rc=$rc)"; fail=1; }
 }
@@ -38,15 +39,15 @@ EOF')" "heredoc write"
 run allow "$(b "sed -n '10,80p' big.txt")" "sed small range"
 run allow "$(b 'git log | head -n 500 > log.txt')" "head to file"
 run allow "$(b 'git status')" "plain command"
-run allow "$(b 'npm run verify')" "npm run verify runs unlocked"
-run allow "$(b 'npm ci')" "npm ci runs unlocked (2026-10-25: four parallel installs froze the slice)"
-run allow "$(b 'cd x && pnpm install --frozen-lockfile')" "pnpm install runs unlocked"
-run allow "$(b 'cd x && pnpm test')" "pnpm test runs unlocked"
-run allow "$(b 'npx tsc --noEmit')" "npx tsc runs unlocked"
-run allow "$(b 'pnpm -C packages/app install')" "pnpm -C dir install runs unlocked (flag before subcommand)"
-run allow "$(b 'npm --prefix web ci')" "npm --prefix web ci runs unlocked"
-run allow "$(b 'pnpm --filter api i --frozen-lockfile')" "pnpm --filter api i runs unlocked"
-run allow "$(b 'npm view left-pad version')" "npm view not runs unlocked"
+run heavy "$(b 'npm run verify')" "npm run verify takes a slot"
+run heavy "$(b 'npm ci')" "npm ci takes a slot"
+run heavy "$(b 'cd x && pnpm install --frozen-lockfile')" "pnpm install takes a slot"
+run heavy "$(b 'cd x && pnpm test')" "pnpm test takes a slot"
+run heavy "$(b 'npx tsc --noEmit')" "npx tsc takes a slot"
+run heavy "$(b 'pnpm -C packages/app install')" "pnpm -C dir install takes a slot"
+run heavy "$(b 'npm --prefix web ci')" "npm --prefix web ci takes a slot"
+run heavy "$(b 'pnpm --filter api i --frozen-lockfile')" "pnpm --filter api i takes a slot"
+run allow "$(b 'npm view left-pad version')" "npm view not queued"
 run deny  "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"mcp__claude_ai_Google_Drive__create_file\",\"tool_input\":{\"content\":\"$(head -c 6000 /dev/zero | tr '\0' a)\"}}" "Drive create_file 6K"
 run allow '{"hook_event_name":"PreToolUse","tool_name":"mcp__claude_ai_Gmail__create_draft","tool_input":{"body":"short email with a link"}}' "short email"
 run deny  "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"cwd\":\"$T\",\"tool_input\":{\"file_path\":\"$T/big.txt\"}}" "Read whole 1000-line file"
@@ -350,4 +351,18 @@ gh run watch 1
 sleep 900
 EOF')" "words in a heredoc"
 done
+# heavy checks take a slot (2026-11-04 OOM); words that only mention them do not queue
+run heavy "$(b 'npm run verify')" "npm run verify takes a slot"
+run heavy "$(b 'npm ci --no-audit')" "npm ci takes a slot"
+run heavy "$(b 'cd x && pnpm install --frozen-lockfile')" "pnpm install after cd takes a slot"
+run heavy "$(b 'npx tsc --noEmit')" "npx tsc takes a slot"
+run heavy "$(b 'pnpm -C packages/app install')" "pnpm -C dir install takes a slot"
+run heavy "$(b 'npm --prefix web ci')" "npm --prefix web ci takes a slot"
+run heavy "$(b 'REDIS_URL=redis://x/3 npm test')" "env prefix before npm test takes a slot"
+run heavy "$(b 'timeout 600 npx vitest run a.test.ts')" "timeout before vitest takes a slot"
+run heavy "$(b 'node_modules/.bin/eslint src')" "eslint binary takes a slot"
+run heavy "$(b 'docker build -t x .')" "docker build takes a slot"
+run allow "$(b 'grep -n vitest package.json')" "grep vitest does not queue"
+run allow "$(b 'git commit -m "npm test now passes"')" "a commit message does not queue"
+run allow "$(b 'ls node_modules/.bin/tsc')" "ls of a binary does not queue"
 exit $fail
