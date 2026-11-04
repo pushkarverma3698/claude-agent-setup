@@ -3268,6 +3268,42 @@
  },
  "rc": 0,
  "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm exec eslint .\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec eslint .\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm exec -- tsc --noEmit\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec -- tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm exec vitest run\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm exec vitest run\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"grep -n vitest package.json\"}}",
  "stdout": ""
 }
