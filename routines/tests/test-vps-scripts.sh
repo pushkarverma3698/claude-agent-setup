@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs setup-claude-routines against a fake ssh, systemctl and install, with every absolute install path remapped into a
-# temp root, and checks that the six VPS scripts and nine units land byte-identical with the mode and owner the VPS has
+# temp root, and checks that the seven VPS scripts and nine units land byte-identical with the mode and owner the VPS has
 # (2026-11-02: they lived only on the VPS, so nobody could review or reinstall them). No network, no root.
 # Usage: bash routines/tests/test-vps-scripts.sh
 set -uo pipefail
@@ -56,7 +56,7 @@ rc=$(run)
 [ -z "${VERBOSE:-}" ] || { cat "$T/out" "$T/calls.log"; }
 [ "$rc" = 0 ] && ok "setup-claude-routines runs against the fakes" || bad "setup rc=$rc: $(tail -5 "$T/out")"
 
-bins="claude-agent-fetch claude-clutter-clean claude-remote-serve claude-remote-update claude-session-reaper routine-worktree"
+bins="claude-agent-fetch claude-clutter-clean claude-remote-serve claude-remote-update claude-session-reaper claude-wake-on-error routine-worktree"
 units="claude-agent-fetch.service claude-agent-fetch.timer claude-clutter-clean.service claude-clutter-clean.timer claude-remote-update.service claude-remote-update.timer claude-remote@.service claude-session-reaper.service claude-session-reaper.timer"
 for f in $bins; do
   d="$R/usr/local/bin/$f"
@@ -77,9 +77,29 @@ done
 : >"$T/calls.log"; before=$(cd "$R" && find . -type f -exec cksum {} + | sort | cksum); rc=$(run)
 after=$(cd "$R" && find . -type f -exec cksum {} + | sort | cksum)
 [ "$rc" = 0 ] && [ "$before" = "$after" ] && ! grep -q 'wrote /.*claude-remote-serve' "$T/out" && ok "second run is idempotent" || bad "second run: rc=$rc"
+# phone sessions ride out limits and wake themselves; the env lives in the unit, never in settings shared with the probes
+u="$REPO/routines/systemd/claude-remote@.service"
+for e in CLAUDE_CODE_RETRY_WATCHDOG=1 CLAUDE_WAKE_ON_ERROR=1 BASH_DEFAULT_TIMEOUT_MS=1200000; do
+  grep -q "^Environment=.*$e" "$u" && ok "claude-remote@ sets $e" || bad "claude-remote@ lacks $e"
+done
+# claude-wake-on-error: exit 2 only when the error is still the newest turn entry, the unit asked for it and tries are left
+wake="$REPO/routines/bin/claude-wake-on-error"
+err='{"type":"assistant","isApiErrorMessage":true}'; usr='{"type":"user"}'; good='{"type":"assistant"}'; side='{"type":"user","isSidechain":true}'
+wake_rc() { # wake_rc <flag> <max tries> <transcript lines...>
+  local flag=$1 max=$2; shift 2; printf '%s\n' "$@" >"$T/tr.jsonl"
+  printf '{"transcript_path":"%s","session_id":"s%s","error":"authentication_failed"}' "$T/tr.jsonl" "$((++wake_n))" \
+    | HOME="$T/wh" CLAUDE_WAKE_ON_ERROR=$flag WAKE_WAIT_SECS=0 WAKE_MAX_TRIES=$max bash "$wake" 2>"$T/wake.err"; echo "$?"
+}
+wake_n=0
+[ "$(wake_rc 1 2 "$usr" "$err")" = 2 ] && grep -q authentication_failed "$T/wake.err" && ok "wake: error is newest, exit 2 names the error" || bad "wake: no exit 2 on a live error"
+[ "$(wake_rc 1 2 "$usr" "$err" '{"type":"last-prompt"}' "$side" '{"type":"system"}' 'not json{')" = 2 ] && ok "wake: metadata, sidechain and a torn line do not hide the error" || bad "wake: trailing lines hid the error"
+[ "$(wake_rc 1 2 "$err" "$usr")" = 0 ] && ok "wake: stays out when a user typed since" || bad "wake: woke over a user message"
+[ "$(wake_rc 1 2 "$err" "$usr" "$good")" = 0 ] && ok "wake: stays out after a good turn" || bad "wake: woke after a good turn"
+[ "$(wake_rc "" 2 "$usr" "$err")" = 0 ] && ok "wake: off without CLAUDE_WAKE_ON_ERROR" || bad "wake: ran without the flag"
+[ "$(wake_rc 1 0 "$usr" "$err")" = 0 ] && ok "wake: stops at the try limit" || bad "wake: ignored the try limit"
 # public repo: the genericised files carry no private names; the values come from routines.env (HOST_LABEL, REVIEW_KEEP, TESTDB_CONTAINER)
 files=$(for f in $bins; do echo "$REPO/routines/bin/$f"; done; for f in $units; do echo "$REPO/routines/systemd/$f"; done)
 # shellcheck disable=SC2086
-! grep -lniE 'oplify|founderos|bachelor|bh-verify|applyqa' $files >/dev/null && ok "no private names in the six scripts or nine units" || bad "private name in: $(grep -lniE 'oplify|founderos|bachelor|bh-verify|applyqa' $files)"
+! grep -lniE 'oplify|founderos|bachelor|bh-verify|applyqa' $files >/dev/null && ok "no private names in the seven scripts or nine units" || bad "private name in: $(grep -lniE 'oplify|founderos|bachelor|bh-verify|applyqa' $files)"
 grep -q 'HOST_LABEL' "$REPO/routines/bin/claude-remote-serve" && grep -q 'REVIEW_KEEP' "$REPO/routines/bin/claude-clutter-clean" && ok "host label and keep-list are read from routines.env" || bad "routines.env keys missing"
 [ "$fails" = 0 ] && echo "all ok" || { echo "$fails failed"; exit 1; }
