@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# claude-wake-on-error: StopFailure hook (asyncRewake) for Remote Control sessions. A turn that dies on a login or
+# organisation error stays dead until someone types, and the retry watchdog does not retry it (2026-11-03: two phone
+# sessions sat 16 h on a 403 that had cleared long before anyone typed). This waits, then wakes the session with exit 2.
+# Still failing: the new turn fails without spending tokens and this hook runs again. Only claude-remote@.service sets
+# CLAUDE_WAKE_ON_ERROR. Routines have routine-sweep; `claude -p` probes must fail fast.
+set -u
+[ "${CLAUDE_WAKE_ON_ERROR:-}" = 1 ] || exit 0
+WAIT=${WAKE_WAIT_SECS:-900}; MAX=${WAKE_MAX_TRIES:-96}   # 15 min apart, 24 h in all; after that the reaper's idle rule stops the session
+input=$(cat)
+transcript=$(jq -r '.transcript_path // empty' <<<"$input")
+session=$(jq -r '.session_id // empty' <<<"$input")
+[ -f "$transcript" ] && [ -n "$session" ] || exit 0
+
+last_is_error() { # a user typed in the meantime, or another wake got through: the newest turn entry is no longer the error
+  tail -n 200 "$transcript" | jq -cR 'fromjson? | select((.type == "user" or .type == "assistant") and (.isSidechain | not))' \
+    | tail -n 1 | jq -e '.isApiErrorMessage == true' >/dev/null
+}
+
+dir=${XDG_CACHE_HOME:-$HOME/.cache}/claude-wake; mkdir -p "$dir"
+find "$dir" -type f -mmin +$(( WAIT / 30 + 1 )) -delete   # no failure for two waits: that streak is over
+n=$(cat "$dir/$session" 2>/dev/null || echo 0)
+[ "$n" -lt "$MAX" ] || exit 0
+echo $(( n + 1 )) >"$dir/$session"
+
+sleep "$WAIT"
+last_is_error || exit 0
+echo "Automatic retry: the last turn stopped on a login or organisation error ($(jq -r '.error // "unknown"' <<<"$input")). Continue the task from where it stopped. If it was already finished, say so and stop." >&2
+exit 2
