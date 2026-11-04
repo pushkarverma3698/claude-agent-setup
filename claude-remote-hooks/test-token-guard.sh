@@ -325,4 +325,29 @@ printf '%s' '{"repos":{"acme/widgets":{"bases":["main"],"branch":"^task/w("},"ac
 TOKEN_GUARD_POLICY="$T/badrx.json" d allow "" "task acme/widgets#9, new" "entry with a broken regex dropped, hook does not crash" --pr-only
 TOKEN_GUARD_POLICY="$T/badrx.json" d allow "" "task acme/quote#9, new" "entry with a quote in a base dropped" --pr-only
 TOKEN_GUARD_POLICY="$T/nope.json" d allow "" "task acme/widgets#9, new" "repo absent from every policy untouched" --pr-only
+# no waiting inside a session (2026-11-04): both machines
+w() { jq -cn --arg c "$1" --argjson bg "${2:-false}" '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c,run_in_background:$bg}}'; }
+for a in "" --pr-only; do
+  H_ARGS=$a
+  wr() { out=$(printf '%s' "$2" | python3 "$H" $H_ARGS 2>/dev/null); rc=$?
+    { [ "$1" = deny ] && [ $rc -eq 2 ]; } || { [ "$1" = allow ] && [ $rc -eq 0 ]; } && echo "ok   $1  $3 ${H_ARGS}" || { echo "FAIL $1  $3 ${H_ARGS} (rc=$rc)"; fail=1; }; }
+  wr deny  "$(w 'sleep 60')" "sleep 60"
+  wr deny  "$(w 'sleep 5m')" "sleep 5m"
+  wr deny  "$(w 'sleep 40; curl x; sleep 40')" "sleeps add up"
+  wr deny  "$(w 'gh pr checks 12 --watch --fail-fast')" "gh pr checks --watch"
+  wr deny  "$(w 'gh pr checks 12 -R a/b --watch > /tmp/x 2>&1')" "gh pr checks --watch to a file, still foreground"
+  wr deny  "$(w 'gh run watch 99 --exit-status')" "gh run watch"
+  wr deny  "$(w 'until gh pr checks 3; do sleep 20; done')" "poll loop with a short sleep"
+  wr allow "$(w 'gh pr checks 12 --watch --fail-fast > /tmp/x 2>&1' true)" "CI watch in the background"
+  wr allow "$(w 'sleep 600' true)" "long sleep in the background"
+  wr allow "$(w 'sleep 600 && curl x &')" "detached with a trailing &"
+  wr allow "$(w 'sleep 5 && curl x')" "short sleep"
+  wr allow "$(w 'for f in a b; do sleep 2; done')" "short sleep in a loop without gh"
+  wr allow "$(w 'gh pr checks 12')" "one CI check"
+  wr allow "$(w 'git commit -m "stop using gh run watch and sleep 600"')" "words in a commit message"
+  wr allow "$(w 'cat > a.md <<EOF
+gh run watch 1
+sleep 900
+EOF')" "words in a heredoc"
+done
 exit $fail

@@ -2752,6 +2752,396 @@
 {
  "args": [],
  "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 60s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 60\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 300s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5m\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 80s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 40; curl x; sleep 40\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 -R a/b --watch > /tmp/x 2>&1\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh run watch 99 --exit-status\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a sleep loop around gh polls CI in the foreground. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"until gh pr checks 3; do sleep 20; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast > /tmp/x 2>&1\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600 && curl x &\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5 && curl x\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"for f in a b; do sleep 2; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m \\\"stop using gh run watch and sleep 600\\\"\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > a.md <<EOF\\ngh run watch 1\\nsleep 900\\nEOF\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 60s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 60\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 300s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5m\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 80s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 40; curl x; sleep 40\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 -R a/b --watch > /tmp/x 2>&1\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh run watch 99 --exit-status\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a sleep loop around gh polls CI in the foreground. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"until gh pr checks 3; do sleep 20; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast > /tmp/x 2>&1\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600 && curl x &\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5 && curl x\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"for f in a b; do sleep 2; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m \\\"stop using gh run watch and sleep 600\\\"\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > a.md <<EOF\\ngh run watch 1\\nsleep 900\\nEOF\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
   "TOKEN_GUARD_DEFAULTS": "<W>/run/none.json",
   "TOKEN_GUARD_POLICY": "<W>/run/none.json"
  },

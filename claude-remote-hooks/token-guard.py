@@ -27,6 +27,7 @@ try:
     from token_guard.policy import body_missing, task_format
     from token_guard.pr import check_pr_create
     from token_guard.push import check_task_push
+    from token_guard.waits import check_wait
     from token_guard.reads import check_cat, check_connector, check_ranges, check_read
 except ImportError as e:  # a copy of this file without token_guard/: refuse loudly rather than guard nothing
     sys.stderr.write(f"BLOCKED by token-guard: its rules are missing ({e}). Copy the token_guard/ directory from "
@@ -55,6 +56,7 @@ def check_body_cli():
 def laptop(data):
     """--pr-only: the same PR, push and dispatch rules, none of the VPS token limits."""
     if data.get("tool_name") == "Bash":
+        check_wait(data.get("tool_input") or {})
         cmd, cwd = (data.get("tool_input") or {}).get("command", ""), data.get("cwd") or os.getcwd()
         for rule in LAPTOP_BASH:
             rule(cmd, cwd)
@@ -79,6 +81,7 @@ def vps(data):
     elif tool == "Read":
         check_read(ti, cwd)
     elif tool == "Bash":
+        check_wait(ti)
         cmd = ti.get("command", "")
         for rule in VPS_BASH:
             rule(cmd, cwd)
