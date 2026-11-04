@@ -85,7 +85,7 @@ if [ $# -eq 0 ]; then
     ( source "$c"; printf '%-28s %-14s %-24s %s\n' "$n" "$PROFILE" "$REPO" "$SCHEDULE" ); done
   exit 0
 fi
-MODE= BASE=
+MODE= BASE= GOAL=
 # PAUSED=1 in the conf: the routine stays defined but does nothing, even on a manual `systemctl start`.
 exit_if_paused() {
   [ "${PAUSED:-0}" != 1 ] || { echo "claude-routine: $1 is paused (PAUSED=1)" >&2; exit 0; }
@@ -201,7 +201,9 @@ if [ -f "$cfg" ] && [ "$(jq -r --arg d "$PWD" '.projects[$d].hasTrustDialogAccep
 fi
 
 label="routine: $name $(TZ=UTC date '+%Y-%m-%d %H:%M') UTC"
-out=$(timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" -n "$label" --remote-control "$label" "$@" -- "$(cat "$prompt")" </dev/null 2>&1) || {
+# GOAL in the conf: a separate small model decides when the run is done, instead of the lead stopping to report.
+task=$(cat "$prompt"); [ -z "$GOAL" ] || task="/goal $task Done when: $GOAL"
+out=$(timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" -n "$label" --remote-control "$label" "$@" -- "$task" </dev/null 2>&1) || {
   printf '%s\n' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' >&2; echo "claude-routine: $name failed to start" >&2
   need="start it by hand from the Claude app if you want it today."; why="Claude refused to start the session on the $(label_of "$profile") account (technical detail: $(printf '%s' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr '\n' ' ' | cut -c1-140))"; exit 1; }
 started=1

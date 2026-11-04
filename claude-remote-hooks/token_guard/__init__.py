@@ -9,5 +9,6 @@ is read next to the hook file exactly as before the split.
   push.py      git push: tracker owner check, claim before push
   dispatch.py  Agent/Task builder prompts: claim before dispatch
   merge.py     gh pr merge (laptop check, VPS wrapper), gh api merges, local-ci status posts
+  waits.py     foreground sleeps and CI watches: use a background command, which wakes the session
 """
 HOOK_DIR = None  # set by token-guard.py; None means the directory that holds this package

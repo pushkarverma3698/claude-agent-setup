@@ -21,7 +21,7 @@ Needs `git`, `python3`, `jq` and `gh`. No VPS needed. Run from the clone:
 ```bash
 git clone https://github.com/pushkarverma3698/claude-agent-setup && cd claude-agent-setup
 mkdir -p ~/.claude/hooks ~/.claude/skills
-install -m 755 claude-remote-hooks/token-guard.py claude-remote-hooks/guard-bash.sh ~/.claude/hooks/
+install -m 755 claude-remote-hooks/token-guard.py claude-remote-hooks/guard-bash.sh claude-remote-hooks/verdict-stop.py ~/.claude/hooks/
 [ ! -d ~/.claude/hooks/token_guard ] || rm -r ~/.claude/hooks/token_guard
 cp -R claude-remote-hooks/token_guard ~/.claude/hooks/   # must sit next to token-guard.py
 cp -R skills/work-the-tracker ~/.claude/skills/
@@ -43,6 +43,10 @@ Register the hooks in `~/.claude/settings.json`. With no settings file yet, this
     "SessionStart": [
       {"matcher": "startup|clear", "hooks": [
         {"type": "command", "command": "$PWD/session-brief", "timeout": 8}]}
+    ],
+    "Stop": [
+      {"hooks": [
+        {"type": "command", "command": "\$HOME/.claude/hooks/verdict-stop.py", "timeout": 10}]}
     ]
   }
 }

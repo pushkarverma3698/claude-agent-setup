@@ -25,6 +25,8 @@
 #                   digest never arrived). The prompt just prints the message.
 #                   PAUSED=1 (optional): the routine keeps its definition and schedule drop-in but its timer is
 #                   stopped and disabled, and `claude-routine <name>` exits 0 at once. Unset or 0: runs as usual.
+#                   GOAL="<what done looks like>, or stop after N turns" (optional): the session starts as
+#                   `/goal <prompt> Done when: <GOAL>`, so a small model, not the lead, decides when the run is done.
 #                   VERDICT=<group>, VERDICT_AT=HH:MM:SS (UTC), VERDICT_REPOS=("tag|owner/repo|bases" …),
 #                   optional VERDICT_CHECKS=("owner/repo|check" …) and VERDICT_QUEUE="<cmd printing READY (n)>":
 #                   the code-only routine-verdict group for this routine (routine-new writes them)
@@ -79,6 +81,15 @@ OVERLAY="${AGENT_OVERLAY_DIR:-}"
 DEFS="${ROUTINE_CONF_DIR:-${OVERLAY:+$OVERLAY/claude-routines}}"
 [ -n "$DEFS" ] && [ -d "$DEFS" ] || { echo "setup-claude-routines: no routine folder: set AGENT_OVERLAY_DIR or ROUTINE_CONF_DIR" >&2; exit 64; }
 
+# check_goal <name> <goal> <mode> <prompt-file>: /goal needs a turn cap, a --bg session, and fits 4000 characters with the prompt.
+check_goal() {
+  [ -n "$2" ] || return 0
+  [[ "$3" != print ]] || { echo "routine $1: GOAL needs a --bg session, not MODE=print" >&2; return 1; }
+  [[ "$2" == *"stop after "*" turns"* ]] || { echo "routine $1: GOAL must end \"or stop after N turns\"" >&2; return 1; }
+  local total=$(( $(wc -c <"$4") + ${#2} + 20 ))
+  [ "$total" -le 4000 ] || { echo "routine $1: prompt + GOAL is $total characters, /goal takes 4000" >&2; return 1; }
+}
+
 echo "== routines: check definitions in ${DEFS/#$HOME/~}"
 shopt -s nullglob
 vgroups=$(mktemp)
@@ -86,10 +97,11 @@ for c in "$DEFS"/*.conf; do
   n=$(basename "$c" .conf)
   [[ "$n" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "bad routine name: $n (a-z, 0-9, -)" >&2; exit 1; }
   [[ -f "$DEFS/$n.md" ]] || { echo "routine $n: missing $n.md" >&2; exit 1; }
-  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; PAUSED=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
+  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; PAUSED=; GOAL=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
     [[ "$PROFILE" =~ ^(main|alt|alt2)(,(main|alt|alt2))*$ ]] || { echo "routine $n: PROFILE must be main, alt, alt2 or a comma list of them" >&2; exit 1; }
     [[ -z "${MODE:-}" || "$MODE" == print ]] || { echo "routine $n: MODE must be empty or print" >&2; exit 1; }
     [[ -z "${PAUSED:-}" || "$PAUSED" =~ ^[01]$ ]] || { echo "routine $n: PAUSED must be empty, 0 or 1" >&2; exit 1; }
+    check_goal "$n" "${GOAL:-}" "${MODE:-}" "$DEFS/$n.md" || exit 1
     [[ -n "$REPO" && -n "$SCHEDULE" ]] || { echo "routine $n: REPO and SCHEDULE are required" >&2; exit 1; }
     "$HERE/routines/bin/routine-schedule" "$SCHEDULE" "${SCHEDULE_TZ:-}" >/dev/null || { echo "routine $n: bad SCHEDULE" >&2; exit 1; }
     [ -n "$VERDICT" ] || exit 0
