@@ -85,3 +85,10 @@ if [ "${full:-0}" -ge "$pct" ]; then
   if [ -n "$bigpid" ]; then kill_tree "$bigpid" "slice memory pressure ${full}%, $((big / 1024))M"
   else echo "reaper: slice memory pressure ${full}% but no tool job to kill"; fi
 fi
+
+# A bh-ci container runs under containerd, outside every job tree, so a kill above leaves it running. The sweep removes
+# only containers whose run is gone (its per-sha lock is free). 2026-11-05: a killed run's eslint held 2G with no slot
+# and memory PSI full stayed at 89%; removing that container dropped it to 1%.
+if [ "${DRY_RUN:-0}" != 1 ] && [ -x /usr/local/bin/bh-ci-sweep ] && [ -n "$(docker ps -q --filter label=bh-ci 2>/dev/null)" ]; then
+  runuser -u claude-agent -- env HOME=/home/claude-agent timeout 300 /usr/local/bin/bh-ci-sweep 2>&1 | sed 's/^/reaper: /'
+fi
