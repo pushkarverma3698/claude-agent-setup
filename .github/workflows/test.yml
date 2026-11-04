@@ -27,3 +27,4 @@ jobs:
       - run: python3 routines/ready/test_routine_config.py
       - run: bash routines/tests/test-routine-sweep.sh
       - run: bash routines/tests/test-vps-scripts.sh
+      - run: bash routines/tests/test-heavy-slot.sh

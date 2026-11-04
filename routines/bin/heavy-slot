@@ -1,0 +1,40 @@
+# Sourced, never run: `. /usr/local/bin/heavy-slot` takes one of HEAVY_SLOTS slots for the calling shell. POSIX sh,
+# because husky hooks are sh. token-guard puts it in front of an agent's heavy commands; the husky init.sh does it for
+# pre-push suites; a local CI runner can take every slot itself.
+# Why: 2026-11-01 and 11-04 parallel builders' checks froze the VPS (memory PSI full 97%, phone sessions stalled). One
+# lock serialized five builders for hours (10-29), no lock froze the box. The slice has about 1.9 GB left over the
+# sessions, so two checks fit.
+# The lock is on fd 9, inherited by the command's children, and the kernel drops it when the last of them exits, so a
+# killed check frees its slot and nothing has to release it. Sourced rather than a wrapper: `cd` and exports in the
+# same command keep working. No slot within HEAVY_SLOT_WAIT seconds: exit 75 without running the command.
+if [ -z "${HEAVY_SLOT_HELD-}" ]; then
+  _hs_dir="$HOME/.cache/heavy-slots"
+  mkdir -p "$_hs_dir"
+  _hs_end=$(($(date +%s) + ${HEAVY_SLOT_WAIT:-1800}))
+  _hs_told=
+  while [ -z "${HEAVY_SLOT_HELD-}" ]; do
+    _hs_i=1
+    while [ "$_hs_i" -le "${HEAVY_SLOTS:-2}" ]; do
+      exec 9>"$_hs_dir/$_hs_i"
+      if flock -n 9; then
+        HEAVY_SLOT_HELD=$_hs_i
+        export HEAVY_SLOT_HELD   # a check inside this one (the pre-push hook of a wrapped git push) must not queue again
+        break
+      fi
+      _hs_i=$((_hs_i + 1))
+    done
+    [ -n "${HEAVY_SLOT_HELD-}" ] && break
+    exec 9>&-
+    if [ "$(date +%s)" -ge "$_hs_end" ]; then
+      echo "heavy-slot: no slot after ${HEAVY_SLOT_WAIT:-1800}s; the command did not run. Retry it with run_in_background, or push and let CI run it." >&2
+      exit 75
+    fi
+    if [ -z "$_hs_told" ]; then
+      echo "heavy-slot: ${HEAVY_SLOTS:-2} heavy checks are running; waiting for a free slot. Long checks belong in run_in_background." >&2
+      _hs_told=1
+    fi
+    sleep "${HEAVY_SLOT_POLL:-5}"
+  done
+  renice -n 10 -p $$ >/dev/null 2>&1
+  unset _hs_dir _hs_end _hs_told _hs_i
+fi
