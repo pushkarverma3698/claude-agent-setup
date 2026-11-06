@@ -54,6 +54,13 @@ check "a clean, pushed worktree deletes its snapshot" '! remote $W >/dev/null'
 (cd "$T/other" && git stash -q -u && python3 "$H" --restore >"$T/r.out"); rc=$?
 check "restore with no snapshot exits 0" '[ $rc = 0 ] && grep -q "no WIP snapshot" $T/r.out'
 
+# a worktree nobody touched for days: its snapshot carries the old date, so claim-branch sees it as dead
+$GW reset -q --hard "origin/$B"; echo stale >"$WT/s.txt"; touch -t 202601010000 "$WT/s.txt"
+GIT_COMMITTER_DATE="2026-01-01T00:00:00Z" $GW commit -q --allow-empty -m old-head
+hook "$WT"
+check "a stale worktree's snapshot is dated by its last change, not by the push" '[ "$(git -C $T/acme/app.git log -1 --format=%cs $W)" = 2026-01-01 ]'
+git -C $T/acme/app.git update-ref -d $W; $GW reset -q --hard "origin/$B"; rm -f "$WT/s.txt"
+
 # not a task branch / not a guarded repo: nothing happens
 $G checkout -q -b scratch && echo x >"$T/clone/x.txt"; hook "$T/clone"
 check "a non-task branch is never pushed" '[ -z "$(git -C $T/acme/app.git for-each-ref refs/wip)" ]'

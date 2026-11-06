@@ -80,6 +80,16 @@ def snapshot_tree(d):
         return out(d, "write-tree", env=env)
 
 
+def work_time(d):
+    """Unix time of the newest change in d: its HEAD commit or the latest mtime of a changed file."""
+    t = [int(out(d, "log", "-1", "--format=%ct") or 0)]
+    for e in out(d, "status", "--porcelain", "-z", "--untracked-files=all").split("\0"):
+        f = os.path.join(d, e[3:]) if len(e) > 3 else ""
+        if f and os.path.isfile(f):
+            t.append(int(os.path.getmtime(f)))
+    return max(t)
+
+
 def save(d, b):
     head, tree = out(d, "rev-parse", "HEAD"), snapshot_tree(d)
     ref = "refs/wip/" + b
@@ -92,8 +102,13 @@ def save(d, b):
     old = remote.get(ref, "")
     if old and out(d, "rev-parse", "-q", "--verify", old + "^{tree}") == tree and out(d, "rev-parse", "-q", "--verify", old + "^") == head:
         return "unchanged"
-    msg = f"wip: {b} on {socket.gethostname().split('.')[0]} at {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
-    sha = out(d, "commit-tree", tree, "-p", head, "-m", msg)
+    # dated by the last real work, not by this push: claim-branch reads the date as "still working", and the hook also
+    # snapshots worktrees no session has touched for days
+    when = work_time(d)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(when))
+    msg = f"wip: {b} on {socket.gethostname().split('.')[0]}, last change {stamp}"
+    env = {**os.environ, "GIT_AUTHOR_DATE": f"{when} +0000", "GIT_COMMITTER_DATE": f"{when} +0000"}
+    sha = out(d, "commit-tree", tree, "-p", head, "-m", msg, env=env)
     r = git(d, "push", "-q", "--no-verify", "origin", f"+{sha}:{ref}", timeout=60)
     return f"saved {ref} {sha[:9]}" if r.returncode == 0 else "push failed: " + r.stderr.strip()
 
