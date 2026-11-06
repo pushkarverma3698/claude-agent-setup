@@ -619,6 +619,20 @@ def claim_branch_bin():
     raise Fail(2, "claim-branch not found (set TRACKER_CLAIM_BRANCH)")
 
 
+def restore_wip(wt):
+    """A leftover's dead run on another machine pushed its unpushed work to refs/wip/<branch> (wip-save Stop hook,
+    2026-11-06): lay it into the fresh worktree so the new holder starts from it, not from the claim commit."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    path = next((p for p in (os.environ.get("WIP_SAVE", ""), "/opt/agent-rules/hooks/wip-save.py",
+                             os.path.expanduser("~/.claude/hooks/wip-save.py"),
+                             os.path.join(here, "..", "..", "claude-remote-hooks", "wip-save.py")) if p and os.path.isfile(p)), "")
+    if not path:
+        log("wip-save.py not installed: a WIP snapshot of this branch, if any, was not restored")
+        return
+    r = subprocess.run([sys.executable, path, "--restore"], cwd=wt, capture_output=True, text=True)
+    log((r.stdout + r.stderr).strip() + ("" if r.returncode == 0 else f" (wip-save exit {r.returncode}: restore it by hand)"))
+
+
 def cmd_claim(cfg, a):
     task, idc = a.task, cfg["ID_COL"]
     t = fetch(cfg)[1]
@@ -687,6 +701,8 @@ def cmd_claim(cfg, a):
         w = gitc("worktree", "add", "--track", "-B", branch, wt, f"origin/{branch}")
         if w.returncode:
             raise Fail(2, f"git worktree add failed: {w.stderr.strip()}")
+        if st == "leftover":
+            restore_wip(wt)
     else:   # adopted: bring it up to the claim commit (empty, so uncommitted files never conflict)
         m = gitc("merge", "-q", "--no-edit", f"origin/{branch}", cwd=wt)
         if m.returncode:

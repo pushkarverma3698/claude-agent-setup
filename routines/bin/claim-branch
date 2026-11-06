@@ -7,7 +7,8 @@
 # CLAIM_HOURS. 2026-10-29: claims on the bare base commit looked hours old and the queue handed T-205/T-214/T-247
 # to a second session; feat/t247-disputes and feat/t247-ownership-disputes were both built.
 # --resume also refuses while another local worktree of the repo on <branch> has uncommitted files or unpushed commits
-# (worktree-holds, the same check the ready scripts use): a session stopped on the usage limit with its work unpushed.
+# (worktree-holds, the same check the ready scripts use): a session stopped on the usage limit with its work unpushed,
+# and while refs/wip/<branch> (wip-save) is under LIVE_HOURS old: a session on another machine is still working.
 # claim-branch --release <owner/repo> <branch>      give a claim back: delete the branch, only while its tip is still a claim
 #   commit and no PR (any state) has it as head. 2026-10-30: the T-138 and T-144 builders found their work depends on unbuilt
 #   tasks, pushed nothing, and their claim-only branches kept the ready script SKIPping both for 12 h instead of listing them BLOCKED.
@@ -61,6 +62,12 @@ if [ $resume = 1 ]; then
   age=$(hours_since "$when")
   if [[ $subj == chore\(claim\):* ]]; then [ "$age" -lt "$CLAIM_HOURS" ] && held "$branch was claimed ${age}h ago"
   else [ "$age" -lt "$LIVE_HOURS" ] && held "$branch was pushed ${age}h ago"; fi
+  # a session on another machine pushes its unpushed work to refs/wip/<branch> after every turn (wip-save, 2026-11-06):
+  # a fresh snapshot means it is still working. `tracker claim` restores an older one into the new worktree.
+  if wip=$(api "git/ref/wip/$branch" --jq .object.sha 2>/dev/null); then
+    wage=$(hours_since "$(api "git/commits/$wip" --jq .committer.date)")
+    [ "$wage" -lt "$LIVE_HOURS" ] && held "a WIP snapshot of $branch was pushed ${wage}h ago"
+  fi
   tree=$(api "git/commits/$tip" --jq .tree.sha)
   claim=$(api git/commits -f "message=$msg" -f "tree=$tree" -f "parents[]=$tip" --jq .sha)
   # Not a force update: GitHub accepts it only while the tip is still $tip, so of two resumers exactly one wins.
