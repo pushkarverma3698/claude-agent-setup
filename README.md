@@ -5,7 +5,7 @@ Hooks, routines and helper scripts for running Claude Code (and other coding age
 ## What is here
 
 - `token-guard.py`: PreToolUse/SessionStart hook. On the VPS it runs in full mode; on a laptop it runs with `--pr-only`, where it checks PR bases, PR bodies and merge targets. Before every non-delete `git push`, in any repo, it runs `tracker check` in the push dir and refuses the push when the session was taken over (exit 5) or the check fails or times out (fail closed); it skips this when `tracker` is not installed. It reads per-repo rules from `routine-policy.defaults.json`, overlaid by `routine-policy.json`. The rules live in `token_guard/` (one module per concern); `token-guard.py` only routes each event to them, so install copies both: `token-guard.py` and the `token_guard/` directory go side by side, and the hook refuses every call (exit 2) if the directory is missing. Tests: `claude-remote-hooks/test-token-guard.sh`, and `claude-remote-hooks/test-token-guard-golden.sh`, which replays every call that suite makes plus a few direct ones and requires the exit code, stdout and stderr to match `testdata/token-guard.golden` byte for byte.
-- `wip-save.py` (in `claude-remote-hooks/`): Stop hook. After every turn it pushes each task worktree's unpushed commits and uncommitted files to `refs/wip/<branch>` on GitHub, so work never lives only on one disk. See "Unpushed work and duplicates" below.
+- `wip-save.py` (in `claude-remote-hooks/`): Stop, StopFailure and SessionEnd hook, plus a 10-minute sweep (`claude-wip-sweep.timer` on the VPS, `com.turicks.wip-sweep` launchd agent on the laptop, installed by the overlay's `sync-agent-rules`). It pushes each worktree's unpushed commits and uncommitted files to `refs/wip/<branch>` on GitHub, so work never lives only on one disk. See "Unpushed work and duplicates" below.
 - `guard-bash.sh` (in `claude-remote-hooks/`): laptop PreToolUse(Bash) hook that blocks a recursive force-delete and a direct `git push` to `main`/`master`. Needs `jq`.
 - `routine-policy`: builds those rules from the `GUARD_REPOS` lines in your routine confs. `--install` writes them to the laptop and the VPS.
 - `setup-claude-routines`, `routine-new`, `routine-verdict`, `routines/`: daily VPS routines driven by systemd timers, with a verdict message afterwards.
@@ -49,7 +49,13 @@ Register the hooks in `~/.claude/settings.json`. With no settings file yet, this
     "Stop": [
       {"hooks": [
         {"type": "command", "command": "\$HOME/.claude/hooks/verdict-stop.py", "timeout": 10},
-        {"type": "command", "command": "\$HOME/.claude/hooks/wip-save.py", "timeout": 120}]}
+        {"type": "command", "command": "\$HOME/.claude/hooks/wip-save.py", "async": true, "timeout": 120}]}
+    ],
+    "StopFailure": [
+      {"hooks": [{"type": "command", "command": "\$HOME/.claude/hooks/wip-save.py", "async": true, "timeout": 120}]}
+    ],
+    "SessionEnd": [
+      {"hooks": [{"type": "command", "command": "\$HOME/.claude/hooks/wip-save.py", "timeout": 60}]}
     ]
   }
 }
@@ -136,7 +142,7 @@ GitHub is the only place a claim or a piece of work counts. Five pieces keep it 
 
 1. **One branch per task.** `claim-branch` (and `tracker claim`, which calls it) refuses while another branch carries the same task id, a claim is under `CLAIM_HOURS` old, or a real push is under `LIVE_HOURS` old. `tracker next` turns a branch made by `claim-branch` alone into a Claimed row, so the CSV still shows it.
 2. **No push without a claim.** `token-guard.py` refuses a push of a task branch (the guarded repo's `branch` regex) that is not on GitHub yet, plain `--force` on one, and any push after `tracker check` says the row was taken over.
-3. **Work never stays on one disk.** `wip-save.py` runs after every turn. Each worktree of the session's repo on a task branch gets one snapshot commit at `refs/wip/<branch>`: parent = its HEAD, so unpushed commits go too; tree = HEAD plus tracked and untracked changes (`.gitignore` honoured; `.env*`, `*.pem`, `*.key` and files over 10 MB left out). The ref is outside `refs/heads`: no CI run, no branch-list entry, no pre-push suite. A clean worktree whose HEAD is on origin deletes its snapshot.
+3. **Work never stays on one disk.** `wip-save.py` runs in the background after every turn, when a turn ends on an API error, when a session exits, and every 10 minutes from a timer, which catches a session killed with no hook (SIGKILL, OOM, reboot, force quit). It covers a guarded repo's task branches and, in any other repo of an `OWNERS` account (pushkarverma3698, oplifyterminal, OplifyMessage), every branch except the bases and origin's default, so a new repo needs no setup. Each such worktree gets one snapshot commit at `refs/wip/<branch>`: parent = its HEAD, so unpushed commits go too; tree = HEAD plus tracked and untracked changes (`.gitignore` honoured; `.env*`, `*.pem`, `*.key` and files over 10 MB left out). The ref is outside `refs/heads`: no CI run, no branch-list entry, no pre-push suite. A clean worktree whose HEAD is on origin deletes its snapshot.
 4. **A live snapshot holds the task; an old one is resumed.** `claim-branch --resume` refuses while the snapshot is under `LIVE_HOURS` old. Past that, `tracker claim` of the leftover runs `wip-save.py --restore` in the new worktree: the dead session's commits are merged and its uncommitted files come back as changes. On the same machine the dead run's own worktree is adopted instead, uncommitted files and all.
 5. **Nothing unsaved is deleted.** `worktree-holds` treats a worktree as clean only when every commit is on GitHub (an empty-repo fetch of the sha, PR heads included); `routine-worktree` moves an unsaved worktree aside instead of removing it, and `claude-clutter-clean` removes kept copies only once `worktree-holds --clean` passes.
 

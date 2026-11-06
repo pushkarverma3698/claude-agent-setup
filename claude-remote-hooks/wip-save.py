@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Stop hook: copy every task worktree's unpushed work to GitHub after each turn (2026-11-06).
+"""Hook and timer: copy every worktree's unpushed work to GitHub (2026-11-06).
 
 A claimed task's work lived only on the disk that ran it. A laptop session that died with uncommitted files or unpushed
 commits kept its claim until the 6 h lease ran out, then a VPS routine rebuilt the task from the claim commit.
 
-After each turn, for each worktree of the session's repo that is on a task branch of a guarded repo (POLICY `branch`), this
-pushes one snapshot commit to refs/wip/<branch>: parent = the worktree's HEAD (so its unpushed commits go too), tree = HEAD
-plus every tracked and untracked change (.gitignore honoured; .env*, keys and files over 10 MB left out). refs/wip/ is
-outside refs/heads: no CI run, no branch-list entry, no pre-push suite (--no-verify), and the claim and PR checks never
-read it. A clean worktree whose HEAD is already on origin deletes its snapshot. claim-branch --resume refuses while a
-snapshot is under LIVE_HOURS old (the session is still working); `wip-save.py --restore`, run by `tracker claim` in the
-new worktree, merges the dead session's commits and lays its uncommitted files back as changes.
+For each worktree of the session's repo on a snapshot branch (a guarded repo's task branch, POLICY `branch`; in any other
+repo of an OWNERS account, any branch but the bases), this pushes one snapshot commit to refs/wip/<branch>: parent = the
+worktree's HEAD (so its unpushed commits go too), tree = HEAD plus every tracked and untracked change (.gitignore
+honoured; .env*, keys and files over 10 MB left out). refs/wip/ is outside refs/heads: no CI run, no branch-list entry,
+no pre-push suite (--no-verify), and the claim and PR checks never read it. A clean worktree whose HEAD is already on
+origin deletes its snapshot. claim-branch --resume refuses while a snapshot is under LIVE_HOURS old (the session is still
+working); `wip-save.py --restore`, run by `tracker claim` in the new worktree, merges the dead session's commits and lays
+its uncommitted files back as changes.
 
-  wip-save.py            hook mode: reads the Stop hook JSON on stdin, never blocks, always exits 0
-  wip-save.py --save     same, for the current directory, printing what it did
-  wip-save.py --restore  in a clean worktree of a task branch: exit 0 restored or nothing to restore, 2 refused
+It runs on Stop (async, after every turn), StopFailure (a turn that ended on an API error) and SessionEnd (exit, /clear,
+logout), and every 10 minutes as `--sweep` for what no hook sees: SIGKILL, the OOM killer, a reboot.
+  wip-save.py                 hook mode: reads the hook JSON on stdin, never blocks, always exits 0
+  wip-save.py --save          same, for the current directory, printing what it did
+  wip-save.py --sweep DIR...  same, for every repo at or one level under each DIR
+  wip-save.py --restore       in a clean worktree of a snapshot branch: exit 0 restored or nothing to restore, 2 refused
 Installed beside token-guard.py (/opt/agent-rules/hooks on the VPS, ~/.claude/hooks on the laptop). Test: test-wip-save.sh.
 """
 import json, os, re, shutil, socket, subprocess, sys, tempfile, time
@@ -24,6 +28,8 @@ sys.path.insert(0, HOOK_DIR)
 sys.dont_write_bytecode = True
 MAX_BYTES = 10 * 1024 * 1024
 SECRETS = (":(exclude,glob)**/.env*", ":(exclude,glob)**/*.pem", ":(exclude,glob)**/*.key", ":(exclude,glob)**/id_rsa*")
+OWNERS = os.environ.get("WIP_OWNERS", "pushkarverma3698 oplifyterminal OplifyMessage").lower().split()
+BASES = {"main", "master", "beta", "staging", "production", "development", "develop", "HEAD"}
 
 
 def git(d, *a, env=None, timeout=40):
@@ -35,24 +41,34 @@ def out(d, *a, **k):
 
 
 def branch_rule(d):
-    """The task-branch regex of d's origin when it is a guarded repo, else ''."""
+    """Which branches of d's repo get snapshots, as a test b -> bool, or None when its origin is not ours. A guarded
+    repo: its task branches (POLICY `branch`). Any other repo of an OWNERS account, so new repos need no setup: every
+    branch except its bases and origin's default branch."""
     import token_guard
     token_guard.HOOK_DIR = HOOK_DIR
-    from token_guard.policy import CLAIMED, slug
-    return CLAIMED.get(slug(out(d, "remote", "get-url", "origin")), "")
+    from token_guard.policy import CLAIMED, PR_BASES, slug
+    url = out(d, "remote", "get-url", "origin")
+    s = slug(url)
+    if s in CLAIMED:
+        return lambda b: bool(re.match(CLAIMED[s], b))
+    m = re.search(r"([\w.-]+)/[\w.-]+?(?:\.git)?/?$", url)
+    if not m or m.group(1).lower() not in OWNERS:
+        return None
+    bases = BASES | set(PR_BASES.get(s, ())) | {out(d, "rev-parse", "--abbrev-ref", "origin/HEAD").removeprefix("origin/")}
+    return lambda b: b not in bases
 
 
 def guarded_branch(d, rule=None):
-    """The task branch d has checked out when its origin is a guarded repo, else ''."""
+    """The branch d has checked out when it gets snapshots, else ''."""
     rule = branch_rule(d) if rule is None else rule
     b = out(d, "branch", "--show-current") if rule else ""
-    return b if b and re.match(rule, b) else ""
+    return b if b and rule(b) else ""
 
 
 def task_worktrees(d):
-    """[(path, branch)] for every worktree of d's repo on a guarded task branch: a routine's session runs in the clone,
+    """[(path, branch)] for every worktree of d's repo on a snapshot branch: a routine's session runs in the clone,
     its task in .claude/worktrees/<branch>."""
-    rule = branch_rule(d)   # one origin for all worktrees: an unguarded repo costs two local git calls, no network
+    rule = branch_rule(d)   # one origin for all worktrees: a repo that is not ours costs two local git calls, no network
     found, path = [], None
     for ln in out(d, "worktree", "list", "--porcelain").splitlines() if rule else []:
         if ln.startswith("worktree "):
@@ -94,7 +110,8 @@ def save(d, b):
     head, tree = out(d, "rev-parse", "HEAD"), snapshot_tree(d)
     ref = "refs/wip/" + b
     remote = dict(reversed(ln.split("\t")) for ln in out(d, "ls-remote", "origin", "refs/heads/" + b, ref).splitlines() if "\t" in ln)
-    if tree == out(d, "rev-parse", "HEAD^{tree}") and remote.get("refs/heads/" + b) == head:
+    on_origin = remote.get("refs/heads/" + b) == head or out(d, "for-each-ref", "--count=1", "--contains", head, "refs/remotes/origin")
+    if tree == out(d, "rev-parse", "HEAD^{tree}") and on_origin:   # nothing only this disk has (a merged branch included)
         if ref not in remote:
             return "clean"
         r = git(d, "push", "-q", "--no-verify", "origin", "--delete", ref)
@@ -117,10 +134,32 @@ def save_all(d):
     return [f"{p}: {save(p, b)}" for p, b in task_worktrees(d)]
 
 
+def sweep(roots):
+    """save_all over every repo at or one level under roots, for a timer: a session killed by SIGKILL, the OOM killer or
+    a reboot runs no hook."""
+    seen, lines = set(), []
+    for r in roots:
+        try:
+            dirs = [r] + sorted(os.path.join(r, c) for c in os.listdir(r))
+        except OSError:
+            continue
+        for d in dirs:
+            if not os.path.exists(os.path.join(d, ".git")):
+                continue
+            try:
+                for p, b in task_worktrees(d):
+                    if p not in seen:
+                        seen.add(p)
+                        lines.append(f"{p}: {save(p, b)}")
+            except Exception as e:  # allow-failopen: one broken repo or a network timeout must not stop the rest
+                lines.append(f"{d}: error {e}")
+    return lines
+
+
 def restore(d):
     b = guarded_branch(d)
     if not b:
-        return 2, "not on a task branch of a guarded repo"
+        return 2, "not on a snapshot branch (a guarded repo's task branch, or a non-base branch of an OWNERS repo)"
     ref = "refs/wip/" + b
     if not out(d, "ls-remote", "origin", ref):
         return 0, "no WIP snapshot for " + b
@@ -149,7 +188,10 @@ def main():
         print(msg)
         sys.exit(rc)
     if sys.argv[1:] == ["--save"]:
-        print("\n".join(save_all(os.getcwd())) or "no task worktrees")
+        print("\n".join(save_all(os.getcwd())) or "no snapshot worktrees")
+        return
+    if sys.argv[1:2] == ["--sweep"]:
+        print("\n".join(sweep(sys.argv[2:])) or "no snapshot worktrees")
         return
     try:
         d = (json.load(sys.stdin) or {}).get("cwd") or os.getcwd()

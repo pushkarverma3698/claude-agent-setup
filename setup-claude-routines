@@ -63,6 +63,7 @@
 #     claude-clutter-clean.timer        daily 03:40: caches, old builds, stale worktrees and review checkouts (claude-clutter-clean)
 #     claude-remote-update.timer        nightly: claude update, then restart only idle, outdated Remote Control servers
 #     claude-session-reaper.timer       every 5 min: stop Remote Control sessions with no transcript write for IDLE_HOURS
+#     claude-wip-sweep.timer            every 10 min: wip-save.py --sweep ~/work, for sessions killed with no hook (SIGKILL, OOM)
 #     claude-remote@<profile>:<target>.service   one Remote Control server (claude-remote-serve); started by hand, not here
 #     (the six scripts behind these, and routine-worktree, are in routines/bin; they read optional HOST_LABEL, REVIEW_KEEP,
 #      TESTDB_CONTAINER from /etc/claude-routines/routines.env)
@@ -277,7 +278,7 @@ systemctl daemon-reload
 systemctl enable --now routine-sweep.timer >/dev/null 2>&1
 # VPS housekeeping timers, moved into git 2026-11-02 (they were enabled on the VPS before; arm = enable, and start with the
 # stamp at now, so a re-install never fires a catch-up run). Their files come from routines/bin and routines/systemd above.
-for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper; do arm "$t.timer"; done
+for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper claude-wip-sweep; do arm "$t.timer"; done
 echo "  routine-sweep.timer next: $(systemctl show -p NextElapseUSecRealtime --value routine-sweep.timer)"
 settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
   if [ "$2" = 1 ]; then

@@ -66,5 +66,27 @@ $G checkout -q -b scratch && echo x >"$T/clone/x.txt"; hook "$T/clone"
 check "a non-task branch is never pushed" '[ -z "$(git -C $T/acme/app.git for-each-ref refs/wip)" ]'
 printf '{"repos":{}}' >"$T/policy.json"; echo y >>"$WT/a.txt"; hook "$WT"
 check "an unguarded repo is never pushed" '[ -z "$(git -C $T/acme/app.git for-each-ref refs/wip)" ]'
+# any other repo of an OWNERS account: every branch but the bases, with no policy entry (new repos need no setup)
+export WIP_OWNERS=acme
+git init -q --bare -b main "$T/acme/lib.git" && git clone -q "$T/acme/lib.git" "$T/lib" 2>/dev/null; L="git -C $T/lib"
+echo l >"$T/lib/l.txt" && $L add l.txt && $L commit -qm init && $L push -q origin main && $L remote set-head origin -a >/dev/null
+lremote() { git -C "$T/acme/lib.git" rev-parse -q --verify "$1"; }
+echo x >>"$T/lib/l.txt"; hook "$T/lib"
+check "an owned repo's base branch is never pushed" '[ -z "$(git -C $T/acme/lib.git for-each-ref refs/wip)" ]'
+$L checkout -q -b fix/thing && hook "$T/lib"
+check "an owned repo with no policy entry snapshots a work branch" 'lremote refs/wip/fix/thing >/dev/null'
+$L checkout -q --detach && echo y >>"$T/lib/l.txt" && hook "$T/lib"
+check "a detached HEAD is never pushed" '[ "$(git -C $T/acme/lib.git for-each-ref --format="%(refname)" refs/wip)" = refs/wip/fix/thing ]'
+$L checkout -q fix/thing && $L commit -qam fix && $L push -q origin fix/thing:main && $L fetch -q origin
+git -C "$T/acme/lib.git" update-ref -d refs/wip/fix/thing; hook "$T/lib"
+check "a clean branch already merged on origin is not snapshotted" '! lremote refs/wip/fix/thing >/dev/null'
+WIP_OWNERS=someone-else; export WIP_OWNERS; echo z >"$T/lib/z.txt"; hook "$T/lib"
+check "a repo of another owner is never pushed" '! lremote refs/wip/fix/thing >/dev/null'
+export WIP_OWNERS=acme
+
+# the timer: a session killed with SIGKILL ran no hook; --sweep finds its worktree from the parent folder
+python3 "$H" --sweep "$T/nope" "$T" >"$T/sw.out"; rc=$?
+check "sweep exits 0 and skips a missing folder" '[ $rc = 0 ]'
+check "sweep snapshots a repo one level under the folder" 'lremote refs/wip/fix/thing >/dev/null && grep -q "lib: saved refs/wip/fix/thing" $T/sw.out'
 (cd "$T" && echo "{}" | python3 "$H"); check "hook with no cwd outside git exits 0" "[ $? = 0 ]"
 exit $fail
