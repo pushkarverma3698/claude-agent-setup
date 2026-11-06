@@ -64,7 +64,7 @@ echo "$*" >> "$FAKE_GH_DIR/cb.log"
 [ -n "${FAKE_CB_EXIT:-}" ] && { echo "claim-branch: held" >&2; exit "$FAKE_CB_EXIT"; }
 case "$1" in
   --release) [ -f "$FAKE_GH_DIR/keep" ] && exit 3; git -C "$FAKE_ORIGIN" branch -qD "$3" 2>/dev/null; echo released ;;
-  --resume) echo "CLAIM_HOURS=${CLAIM_HOURS:-12}" >> "$FAKE_GH_DIR/cb.log"   # claim-branch refuses a claim commit younger than CLAIM_HOURS
+  --resume) echo "CLAIM_HOURS=${CLAIM_HOURS:-12} cwd=$PWD" >> "$FAKE_GH_DIR/cb.log"   # claim-branch refuses a claim commit younger than CLAIM_HOURS
             [ -f "$FAKE_GH_DIR/tip_age" ] && [ "$(cat "$FAKE_GH_DIR/tip_age")" -lt "${CLAIM_HOURS:-12}" ] && { echo "claim-branch: claimed $(cat "$FAKE_GH_DIR/tip_age")h ago, someone holds the task" >&2; exit 3; }
             echo "noise line"; echo 2222222222222222222222222222222222222222 ;;
   *) git -C "$FAKE_ORIGIN" branch "$2" main && echo 1111111111111111111111111111111111111111 ;;
@@ -286,6 +286,25 @@ class Behaviour(Sandbox):
         gd = sh("git", "rev-parse", "--absolute-git-dir", cwd=old)
         self.assertEqual(json.loads(readf(os.path.join(gd, "tracker-claim")))["task"], "T-101")
         self.assertFalse(os.path.exists(os.path.join(self.clones["a"], ".claude", "worktrees", "feat-t101-thing")))
+
+    def test_04c2_leftover_adopts_the_dead_runs_dirty_worktree(self):
+        # 2026-11-06: T-137/142/143 were leftovers whose dead run left uncommitted files: claim-branch --resume ran from the
+        # clone, so worktree-holds counted that very worktree as someone else's unsaved work and refused (exit 3) for 72h
+        self.branch_on_remote("feat/t101-thing", 9)
+        old = os.path.join(self.d, "elsewhere", "old-run")
+        sh("git", "fetch", "-q", "origin", cwd=self.clones["a"])
+        sh("git", "worktree", "add", "--track", "-B", "feat/t101-thing", old, "origin/feat/t101-thing", cwd=self.clones["a"])
+        writef(os.path.join(old, "half-done.txt"), "wip")
+        tree = sh("git", "rev-parse", "feat/t101-thing^{tree}", cwd=self.origin)
+        claim = sh("git", "-c", "user.email=t@t", "-c", "user.name=t", "commit-tree", tree, "-p", "feat/t101-thing", "-m", "claim", cwd=self.origin)
+        sh("git", "update-ref", "refs/heads/feat/t101-thing", claim, cwd=self.origin)   # what claim-branch --resume pushes
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(9))])
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        cwd = re.search(r"cwd=(\S+)", self.log("cb.log")).group(1)
+        self.assertEqual(os.path.realpath(cwd), os.path.realpath(old))
+        self.assertEqual(readf(os.path.join(old, "half-done.txt")), "wip")
+        self.assertEqual(sh("git", "rev-parse", "HEAD", cwd=old), claim)
 
     def test_04d_leftover_whose_derived_branch_is_a_merged_pr_head_gets_a_suffix(self):
         # a "Part of T-101" PR merged from feat/t101-thing and the branch was kept: claiming the leftover must not reuse that name
