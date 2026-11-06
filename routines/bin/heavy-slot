@@ -2,8 +2,10 @@
 # because husky hooks are sh. token-guard puts it in front of an agent's heavy commands; the husky init.sh does it for
 # pre-push suites; a local CI runner can take every slot itself.
 # Why: 2026-11-01 and 11-04 parallel builders' checks froze the VPS (memory PSI full 97%, phone sessions stalled). One
-# lock serialized five builders for hours (10-29), no lock froze the box. The slice has about 1.9 GB left over the
-# sessions, so two checks fit.
+# lock serialized five builders for hours (10-29), no lock froze the box. Two slots (11-04) did not fit either: one
+# oplify eslint or tsc takes 1.3-2 GB, the slice has about 1.9 GB left over the sessions, and in the 60 h after two slots
+# went in the reaper's pressure valve killed 75 checks mid-run, so they re-ran and were killed again (11-04 17:14-18:55
+# every 5 min). One slot (2026-11-06): a check waits for the one before it instead of both dying.
 # The lock is on fd 9, inherited by the command's children, and the kernel drops it when the last of them exits, so a
 # killed check frees its slot and nothing has to release it. Sourced rather than a wrapper: `cd` and exports in the
 # same command keep working. No slot within HEAVY_SLOT_WAIT seconds: exit 75 without running the command.
@@ -14,7 +16,7 @@ if [ -z "${HEAVY_SLOT_HELD-}" ]; then
   _hs_told=
   while [ -z "${HEAVY_SLOT_HELD-}" ]; do
     _hs_i=1
-    while [ "$_hs_i" -le "${HEAVY_SLOTS:-2}" ]; do
+    while [ "$_hs_i" -le "${HEAVY_SLOTS:-1}" ]; do
       exec 9>"$_hs_dir/$_hs_i"
       if flock -n 9; then
         HEAVY_SLOT_HELD=$_hs_i
@@ -30,7 +32,7 @@ if [ -z "${HEAVY_SLOT_HELD-}" ]; then
       exit 75
     fi
     if [ -z "$_hs_told" ]; then
-      echo "heavy-slot: ${HEAVY_SLOTS:-2} heavy checks are running; waiting for a free slot. Long checks belong in run_in_background." >&2
+      echo "heavy-slot: ${HEAVY_SLOTS:-1} heavy checks are running; waiting for a free slot. Long checks belong in run_in_background." >&2
       _hs_told=1
     fi
     sleep "${HEAVY_SLOT_POLL:-5}"

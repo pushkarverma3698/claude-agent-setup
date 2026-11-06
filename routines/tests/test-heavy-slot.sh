@@ -31,6 +31,10 @@ wait "$w"; rc=$?
 kill "$p2" 2>/dev/null
 wait 2>/dev/null
 
+# the default is one slot: a second check waits while the first runs
+( unset HEAVY_SLOTS; hold; q=$!; HEAVY_SLOT_WAIT=1 sh -c ". '$S'; echo RAN" >"$T/o" 2>&1; rc=$?; kill "$q" 2>/dev/null; wait "$q" 2>/dev/null; exit $rc ); rc=$?
+[ $rc = 75 ] && ! grep -q RAN "$T/o" && ok "default HEAVY_SLOTS is 1: a second check waits" || bad "default slots: rc=$rc $(cat "$T/o")"
+
 # the hook's real rewrite runs under bash with the real script, keeping the cwd and the exit code
 b() { jq -cn --arg c "$1" --arg d "$T" '{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$d,tool_input:{command:$c}}'; }
 out=$(b 'cd sub && npm_config_x=1 npm test; exit 5' | TOKEN_GUARD_DEFAULTS=/nonexistent TOKEN_GUARD_POLICY=/nonexistent python3 "$G" | jq -r .hookSpecificOutput.updatedInput.command)
