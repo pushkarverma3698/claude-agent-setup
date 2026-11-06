@@ -139,7 +139,7 @@ def restore(d):
         if c.returncode:
             return 2, f"the snapshot's uncommitted files conflict with {b}: resolve them, they are in the worktree now"
         git(d, "reset", "-q")   # back to uncommitted changes, as the dead session left them
-    n = len(out(d, "status", "--porcelain").splitlines())
+    n = len(out(d, "status", "--porcelain", "--untracked-files=all").splitlines())   # a new folder is one line without it
     return 0, f"restored {ref} ({out(d, 'log', '-1', '--format=%s', ref)}): {n} uncommitted files"
 
 
