@@ -306,6 +306,32 @@ class Behaviour(Sandbox):
         self.assertEqual(readf(os.path.join(old, "half-done.txt")), "wip")
         self.assertEqual(sh("git", "rev-parse", "HEAD", cwd=old), claim)
 
+    def test_04c3_leftover_from_another_machine_restores_its_wip_snapshot(self):
+        # 2026-11-06: a laptop run died with an unpushed commit and uncommitted files; its wip-save Stop hook had pushed them
+        # to refs/wip/<branch>. The VPS claim of the leftover starts a fresh worktree and must start from that work.
+        self.branch_on_remote("feat/t101-thing", 9)
+        wip = os.path.abspath(os.path.join(HERE, "..", "..", "claude-remote-hooks", "wip-save.py"))
+        pol = os.path.join(self.d, "policy.json")
+        writef(pol, json.dumps({"repos": {"acme/app": {"bases": ["main"], "branch": r"^feat/t(\d+)-"}}}))
+        env = {"WIP_SAVE": wip, "TOKEN_GUARD_POLICY": pol, "TOKEN_GUARD_DEFAULTS": os.path.join(self.d, "none.json")}
+        b = self.clones["b"]
+        sh("git", "fetch", "-q", "origin", cwd=b)
+        sh("git", "checkout", "-q", "-b", "feat/t101-thing", "origin/feat/t101-thing", cwd=b)
+        writef(os.path.join(b, "done.txt"), "committed")
+        sh("git", "add", "done.txt", cwd=b)
+        sh("git", "commit", "-qm", "feat: half", cwd=b)
+        writef(os.path.join(b, "half-done.txt"), "wip")
+        subprocess.run([sys.executable, wip, "--save"], cwd=b, env={**self.env, **env}, check=True, capture_output=True)
+        self.assertTrue(sh("git", "rev-parse", "refs/wip/feat/t101-thing", cwd=self.origin))
+        self.put([row("T-101", status="Building", Holder="x:y:z", Branch="feat/t101-thing", Updated=ago(9))])
+        r = self.tracker("claim", "T-101", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        wt = re.search(r"worktree=(\S+)", r.stdout).group(1)
+        self.assertEqual(readf(os.path.join(wt, "half-done.txt")), "wip")
+        self.assertEqual(readf(os.path.join(wt, "done.txt")), "committed")
+        self.assertIn("?? half-done.txt", sh("git", "status", "--porcelain", cwd=wt))
+        self.assertIn("restored refs/wip/feat/t101-thing", r.stderr)
+
     def test_04d_leftover_whose_derived_branch_is_a_merged_pr_head_gets_a_suffix(self):
         # a "Part of T-101" PR merged from feat/t101-thing and the branch was kept: claiming the leftover must not reuse that name
         self.branch_on_remote("feat/t101-thing", 30)

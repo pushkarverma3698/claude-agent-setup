@@ -12,6 +12,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CLAIM = next(p for p in (os.path.join(HERE, "..", "bin", "claim-branch"), shutil.which("claim-branch") or "") if os.path.exists(p))
 FAKE_GH = """#!/usr/bin/env bash
 case "$*" in
+  *"git/ref/wip/"*) [ -n "$FAKE_WIP_DATE" ] || exit 1; echo WIPSHA ;;
+  *"git/commits/WIPSHA "*) echo "$FAKE_WIP_DATE" ;;
   *"git/ref/heads/"*) echo 1111111111111111111111111111111111111111 ;;
   *"PATCH"*) ;;
   *"--jq .tree.sha"*) echo 2222222222222222222222222222222222222222 ;;
@@ -53,8 +55,8 @@ class ResumeRespectsWorktrees(unittest.TestCase):
         return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd or self.d,
                               check=True, capture_output=True)
 
-    def resume(self, cwd):
-        env = dict(os.environ, HOME=self.d, PATH=os.path.join(self.d, "bin") + os.pathsep + os.environ["PATH"])
+    def resume(self, cwd, wip_date=""):
+        env = dict(os.environ, HOME=self.d, FAKE_WIP_DATE=wip_date, PATH=os.path.join(self.d, "bin") + os.pathsep + os.environ["PATH"])
         env.pop("CLAIM_REPO_DIR", None)
         return subprocess.run([CLAIM, "--resume", "owner/repo", "feat/t1-x"], cwd=cwd, env=env,
                               capture_output=True, text=True)
@@ -73,6 +75,17 @@ class ResumeRespectsWorktrees(unittest.TestCase):
 
     def test_allowed_when_clean(self):
         r = self.resume(self.d)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "CLAIMSHA"), r.stderr)
+
+    def test_refused_while_a_wip_snapshot_is_fresh(self):
+        # 2026-11-06: a session on another machine pushes refs/wip/<branch> every turn (wip-save): it is still working
+        now = subprocess.run(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"], capture_output=True, text=True).stdout.strip()
+        r = self.resume(self.d, wip_date=now)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertIn("WIP snapshot", r.stderr)
+
+    def test_allowed_when_the_wip_snapshot_is_old(self):
+        r = self.resume(self.d, wip_date="2026-01-01T00:00:00Z")
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "CLAIMSHA"), r.stderr)
 
     def test_allowed_from_its_own_worktree(self):
