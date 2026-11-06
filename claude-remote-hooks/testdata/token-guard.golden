@@ -150,7 +150,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm run verify\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm run verify\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm run verify\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -161,7 +161,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm ci\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -172,7 +172,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm install --frozen-lockfile\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm install --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm install --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -183,7 +183,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm test\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm test\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm test\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -194,7 +194,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npx tsc --noEmit\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpx tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpx tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -205,7 +205,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm -C packages/app install\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm -C packages/app install\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm -C packages/app install\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -216,7 +216,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm --prefix web ci\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm --prefix web ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm --prefix web ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -227,7 +227,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm --filter api i --frozen-lockfile\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm --filter api i --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm --filter api i --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3149,7 +3149,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm run verify\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm run verify\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm run verify\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3161,7 +3161,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm ci --no-audit\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm ci --no-audit\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm ci --no-audit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3173,7 +3173,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm install --frozen-lockfile\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm install --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm install --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3185,7 +3185,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npx tsc --noEmit\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpx tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpx tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3197,7 +3197,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm -C packages/app install\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm -C packages/app install\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm -C packages/app install\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3209,7 +3209,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm --prefix web ci\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm --prefix web ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm --prefix web ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3221,7 +3221,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"REDIS_URL=redis://x/3 npm test\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nREDIS_URL=redis://x/3 npm test\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nREDIS_URL=redis://x/3 npm test\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3233,7 +3233,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"timeout 600 npx vitest run a.test.ts\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ntimeout 600 npx vitest run a.test.ts\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ntimeout 600 npx vitest run a.test.ts\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3245,7 +3245,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"node_modules/.bin/eslint src\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnode_modules/.bin/eslint src\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnode_modules/.bin/eslint src\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3257,7 +3257,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"docker build -t x .\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ndocker build -t x .\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ndocker build -t x .\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3269,7 +3269,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm exec eslint .\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec eslint .\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec eslint .\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3281,7 +3281,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm exec -- tsc --noEmit\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec -- tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec -- tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -3293,7 +3293,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm exec vitest run\"}}",
- "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm exec vitest run\"}, \"permissionDecisionReason\": \"token-guard: heavy check takes one of two slots\"}}\n"
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm exec vitest run\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],

@@ -149,6 +149,7 @@ echo "== routines: scripts, units and job files (real files in this folder and t
 #   claude-notify, routine-verdict   -> /usr/local/bin
 #   routines/bin/*                   -> /usr/local/bin (claude-profile-env is sourced, so 644)
 #   routines/systemd/*               -> /etc/systemd/system
+#   routines/needrestart/claude.conf -> /etc/needrestart/conf.d (needrestart leaves claude-* units alone)
 #   routines/jobs/*.md               -> /home/claude-agent/agent-jobs (claude-agent owns them; founder-actions.md
 #                                       lives only there: it is runtime state, never copied)
 #   routines/ready/*                 -> /home/claude-agent/work (ready-set scripts; test_*.py stay in the repo)
@@ -176,6 +177,7 @@ for f in "$r"/bin/*; do
   put "$m" "/usr/local/bin/$n" "$f"
 done
 for f in "$r"/systemd/*; do put 644 "/etc/systemd/system/$(basename "$f")" "$f"; done
+[ ! -d /etc/needrestart/conf.d ] || put 644 /etc/needrestart/conf.d/claude.conf "$r/needrestart/claude.conf"   # never restart claude-* units
 # Retired 2026-10-31: the nightly claude-bgd-update restart. The wrapper lets the daemon upgrade itself in
 # place; a restart is now the only thing that kills workers. The daemon-reload further down picks up the drop-in removal.
 for f in /usr/local/bin/claude-bgd-update /etc/systemd/system/claude-remote-update.service.d/bgd.conf; do

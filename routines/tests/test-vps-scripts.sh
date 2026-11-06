@@ -10,7 +10,7 @@ T=$(mktemp -d); trap 'rm -r -- "$T"' EXIT
 fails=0
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fails=$((fails+1)); }
-R="$T/root"; mkdir -p "$T/bin" "$T/defs" "$R" "$R/var/lib/systemd/timers"
+R="$T/root"; mkdir -p "$T/bin" "$T/defs" "$R" "$R/var/lib/systemd/timers" "$R/etc/needrestart/conf.d"
 : >"$T/calls.log"
 printf 'PROFILE=main\nREPO=acme\nSCHEDULE="03:04"\n' >"$T/defs/demo.conf"; echo demo >"$T/defs/demo.md"
 
@@ -24,7 +24,7 @@ case "$cmd" in
   "sudo -n env STAGE="*)
     sed -e "s#/usr/local/bin#$ROOT/usr/local/bin#g" -e "s#/etc/systemd/system#$ROOT/etc/systemd/system#g" \
         -e "s#/etc/claude-routines#$ROOT/etc/claude-routines#g" -e "s#/home/claude-agent#$ROOT/home/claude-agent#g" \
-        -e "s#/var/lib/systemd#$ROOT/var/lib/systemd#g" \
+        -e "s#/var/lib/systemd#$ROOT/var/lib/systemd#g" -e "s#/etc/needrestart#$ROOT/etc/needrestart#g" \
         -e 's#"${rearm\[@\]}"#${rearm[@]+"${rearm[@]}"}#' |   # bash 3.2 (macOS) trips on an empty array under set -u; the VPS has bash 5
      eval "${cmd#sudo -n }" ;;
   *) cat >/dev/null ;;
@@ -66,6 +66,8 @@ for f in $units; do
   d="$R/etc/systemd/system/$f"
   if cmp -s "$REPO/routines/systemd/$f" "$d" && [ "$(mode "$d")" = 644 ]; then ok "$f installed, 644, same bytes"; else bad "$f missing, differs or wrong mode"; fi
 done
+d="$R/etc/needrestart/conf.d/claude.conf"
+cmp -s "$REPO/routines/needrestart/claude.conf" "$d" && [ "$(mode "$d")" = 644 ] && ok "needrestart claude.conf installed, 644" || bad "needrestart claude.conf missing or differs"
 # root:root on the VPS: put() must pass no owner for these
 ! grep -q '^owner' "$T/calls.log" && ok "no owner requested (root:root, as on the VPS)" || bad "owner requested: $(grep '^owner' "$T/calls.log")"
 grep -q '^systemctl daemon-reload' "$T/calls.log" && ok "daemon-reload runs" || bad "no daemon-reload"

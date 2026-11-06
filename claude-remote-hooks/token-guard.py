@@ -7,7 +7,7 @@ prints is resent on every later call, and every byte the model writes into a too
 1% of a 5-hour window). Two incidents this enforces:
   2026-10-14  whole-repo `cat` loops, compacted 3x, then re-read the same files.
   2026-10-15  10 docs re-typed into Drive create_file: 159K output tokens to send one email.
-Heavy checks (lint/test/build/install) take one of two slots: token_guard/heavy.py, routines/bin/heavy-slot.
+Heavy checks (lint/test/build/install) wait for the heavy-check slot: token_guard/heavy.py, routines/bin/heavy-slot.
 
 Deny = exit 2, the reason on stderr goes back to Claude. `--pr-only` (the laptop hook) runs only the PR guards.
 `--check-body <repo> [<pr>]` (PR body on stdin) is the VPS merge wrapper's body check.
@@ -97,7 +97,7 @@ def vps(data):
             new = dict(ti); new["command"] = slotted
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                 "permissionDecision": "allow", "updatedInput": new,
-                "permissionDecisionReason": "token-guard: heavy check takes one of two slots"}}))
+                "permissionDecisionReason": "token-guard: heavy check waits for the heavy-check slot"}}))
 
 
 def main():

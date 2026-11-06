@@ -185,8 +185,9 @@ fi
 why="Claude's background service for the $(label_of "$profile") account is not running on the server"; need="ask in a Claude session to restart the service claude-bgd@$profile."
 bgd_ready "$profile"
 why="" need=""
-# The shared clone must be clean: every routine run branches from it.
-[ -z "$(git -C "$dir" status --porcelain)" ] || { why="the shared clone $dir has uncommitted changes"; need="ask a Claude session to clean $dir (or commit the changes), then start the routine."; exit 75; }
+# The shared clone must be clean: every routine run branches from it. Untracked files do not reach the worktree, so
+# they do not count (2026-11-06: an agent's stray pr-258-body.md kept oplify-api from starting for days, notifying hourly).
+[ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] || { why="the shared clone $dir has uncommitted changes"; need="ask a Claude session to clean $dir (or commit the changes), then start the routine."; exit 75; }
 timeout 120 git -C "$dir" fetch --prune --quiet origin || echo "git fetch failed; the worktree may start from an older origin"
 if [ -n "${BASE:-}" ]; then ref=origin/$BASE; else ref=$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD); fi
 wt="$W/$name"
