@@ -57,7 +57,7 @@ rc=$(run)
 [ "$rc" = 0 ] && ok "setup-claude-routines runs against the fakes" || bad "setup rc=$rc: $(tail -5 "$T/out")"
 
 bins="claude-agent-fetch claude-clutter-clean claude-remote-serve claude-remote-update claude-session-reaper claude-wake-on-error routine-worktree"
-units="claude-agent-fetch.service claude-agent-fetch.timer claude-clutter-clean.service claude-clutter-clean.timer claude-remote-update.service claude-remote-update.timer claude-remote@.service claude-session-reaper.service claude-session-reaper.timer"
+units="claude-agent-fetch.service claude-agent-fetch.timer claude-clutter-clean.service claude-clutter-clean.timer claude-remote-update.service claude-remote-update.timer claude-remote@.service claude-session-reaper.service claude-session-reaper.timer claude-wip-sweep.service claude-wip-sweep.timer"
 for f in $bins; do
   d="$R/usr/local/bin/$f"
   if cmp -s "$REPO/routines/bin/$f" "$d" && [ "$(mode "$d")" = 755 ]; then ok "$f installed, 755, same bytes"; else bad "$f missing, differs or wrong mode"; fi
@@ -71,8 +71,8 @@ cmp -s "$REPO/routines/needrestart/claude.conf" "$d" && [ "$(mode "$d")" = 644 ]
 # root:root on the VPS: put() must pass no owner for these
 ! grep -q '^owner' "$T/calls.log" && ok "no owner requested (root:root, as on the VPS)" || bad "owner requested: $(grep '^owner' "$T/calls.log")"
 grep -q '^systemctl daemon-reload' "$T/calls.log" && ok "daemon-reload runs" || bad "no daemon-reload"
-# the four timers that are enabled on the VPS are enabled by the installer; nothing else new
-for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper; do
+# the five timers that are enabled on the VPS are enabled by the installer; nothing else new
+for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper claude-wip-sweep; do
   grep -q "^systemctl enable $t.timer" "$T/calls.log" && ok "$t.timer enabled" || bad "$t.timer not enabled"
 done
 # a second run changes nothing
