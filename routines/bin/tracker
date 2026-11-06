@@ -654,7 +654,12 @@ def cmd_claim(cfg, a):
         # the row lease decides who may take a leftover: claim-branch's own CLAIM_HOURS (12) must not outlive LEASE_HOURS (6),
         # or `next` offers a leftover that `claim` then refuses. LIVE_HOURS stays: a recent real push means someone is live.
         hours = str(math.ceil(cfg["lease"].total_seconds() / 3600))
-        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, env={**os.environ, "CLAIM_HOURS": hours})
+        # run from the dead run's worktree, which claim then adopts: worktree-holds --exclude "$PWD" must not count that
+        # worktree's unsaved files as another holder (2026-11-06: T-137/142/143 refused for 72h). The expired lease proves it is free.
+        old = worktree_of(cfg["REPO_DIR"], branch)
+        here = old if old and (not a.worktree or os.path.abspath(a.worktree) == old) else None
+        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, cwd=here,
+                           env={**os.environ, "CLAIM_HOURS": hours})
     else:
         branch = base = cfg["BRANCH_FMT"].format(num=task_num(task), slug=a.slug or slugify(g(cfg["TITLE_COL"])))
         # a kept branch of an earlier merged PR (or any live one) owns the plain name: claim-branch would refuse it as held
@@ -682,6 +687,10 @@ def cmd_claim(cfg, a):
         w = gitc("worktree", "add", "--track", "-B", branch, wt, f"origin/{branch}")
         if w.returncode:
             raise Fail(2, f"git worktree add failed: {w.stderr.strip()}")
+    else:   # adopted: bring it up to the claim commit (empty, so uncommitted files never conflict)
+        m = gitc("merge", "-q", "--no-edit", f"origin/{branch}", cwd=wt)
+        if m.returncode:
+            raise Fail(2, f"git merge origin/{branch} in {wt} failed: {(m.stderr or m.stdout).strip()}")
     env, run, holder = identity(cfg)
 
     def fn(t2):

@@ -29,6 +29,7 @@ def find(name):
 
 ROUTINE = find("claude-routine")
 HOLDS = find("worktree-holds")
+RWT = find("routine-worktree")
 VERDICT = os.path.abspath(os.path.join(HERE, "..", "..", "routine-verdict"))
 
 
@@ -240,6 +241,51 @@ class WorktreeHolds(unittest.TestCase):
         self.add_wt(wt, "feat/t4-x")
         write(f"{self.fakebin}/gh", "#!/bin/sh\nexit 1\n", 0o755)
         self.assertEqual(self.clean(wt).returncode, 3)
+
+    def test_detached_worktree_whose_commit_github_holds_is_clean(self):
+        # 2026-11-06: four kept-* routine copies (1.4 GB) stayed for days: detached, their branch squash-merged and deleted,
+        # so no remote branch and no PR-head lookup (detached has no branch) found the commits; GitHub still had them
+        wt = f"{self.d}/work/wt/kept-x-t5"
+        self.add_wt(wt, "feat/t5-x")
+        sha = self.g("rev-parse", "HEAD", cwd=wt)
+        self.g("push", "-q", "origin", f"{sha}:refs/pull/5/head", cwd=wt)   # what a PR leaves on GitHub
+        self.g("checkout", "-q", "--detach", cwd=wt)
+        self.g("branch", "-D", "feat/t5-x", cwd=self.clone)
+        self.assertEqual(self.g("rev-list", "--count", "HEAD", "--not", "--remotes", cwd=wt), "1")
+        r = self.clean(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_detached_worktree_github_lacks_is_not_clean(self):
+        wt = f"{self.d}/work/wt/kept-x-t6"
+        self.add_wt(wt, "feat/t6-x")
+        self.g("checkout", "-q", "--detach", cwd=wt)
+        r = self.clean(wt)
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+
+    def sweep(self, path):
+        if not shutil.which("timeout"):   # macOS: CI's Ubuntu has coreutils timeout
+            write(f"{self.fakebin}/timeout", '#!/bin/sh\nshift; exec "$@"\n', 0o755)
+        env = dict(os.environ, PATH=self.fakebin + ":" + os.environ["PATH"])
+        return subprocess.run(["bash", RWT, "sweep", "0", path], capture_output=True, text=True, env=env)
+
+    def test_sweep_keeps_a_commit_only_this_disk_has(self):
+        # 2026-11-06: unsaved() fetched the SHA inside the worktree, where git exits 0 for a commit it already has,
+        # so sweep and clean dropped worktrees whose commits existed nowhere else
+        wt = f"{self.d}/work/wt/r-t7"
+        self.add_wt(wt, "feat/t7-x")
+        self.g("checkout", "-q", "--detach", cwd=wt)
+        r = self.sweep(wt)
+        self.assertIn("keep", r.stdout, r.stdout + r.stderr)
+        self.assertTrue(os.path.isdir(wt))
+
+    def test_sweep_removes_a_commit_github_holds_in_a_pr_ref(self):
+        wt = f"{self.d}/work/wt/r-t8"
+        self.add_wt(wt, "feat/t8-x")
+        self.g("push", "-q", "origin", "HEAD:refs/pull/8/head", cwd=wt)
+        self.g("checkout", "-q", "--detach", cwd=wt)
+        r = self.sweep(wt)
+        self.assertIn("removed", r.stdout, r.stdout + r.stderr)
+        self.assertFalse(os.path.exists(wt))
 
     def test_routine_worktree_holds_nothing_but_phone_worktree_does(self):
         # 10-29: the ready script skipped T-145 for 72 h because of a dirty routine-builder worktree under work/wt/
