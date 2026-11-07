@@ -4,7 +4,8 @@
   - claude-routine live_run: a working run with a record under 45 min old must not be stopped
   - worktree-holds --clean: a squash-merged worktree is clean; a routine worktree under work/wt/ holds nothing
   - routine-verdict: three facts per group (finished? merged + proof, needs you), idle prints idle, an all-PAUSED group is
-    skipped (bash 4+, GNU date, jq: run on the VPS or in CI; gh, systemctl, tracker, claude and claude-notify are fakes)
+    skipped; "Needs you" is one numbered list (PRs, founder ledger items, Blocked tracker rows; deduped, oldest first, 10 max)
+    (bash 4+, GNU date, jq: run on the VPS or in CI; gh, systemctl, tracker, claude, claude-notify and the ledger are fakes)
 """
 import datetime
 import json
@@ -376,12 +377,29 @@ class VerdictThreeFacts(unittest.TestCase):
         env = dict(os.environ, PATH=self.fake + ":" + os.environ["PATH"], FAKE=self.fake, ROUTINE_VERDICT_DEFS=self.defs,
                    ROUTINE_VERDICT_STATE=f"{self.d}/state", ROUTINE_VERDICT_NOTIFY=f"{self.fake}/notify",
                    ROUTINE_VERDICT_TRACKER=f"{self.fake}/tracker", ROUTINE_VERDICT_WORK=f"{self.d}/work",
-                   ROUTINE_VERDICT_PROFILE_ENV=f"{self.fake}/profile-env")
+                   ROUTINE_VERDICT_PROFILE_ENV=f"{self.fake}/profile-env", ROUTINE_VERDICT_LEDGER=f"{self.d}/ledger.md")
         if dry:
             env["DRY_RUN"] = "1"
         r = subprocess.run([VERDICT, *args], capture_output=True, text=True, env=env)
         sent = f"{self.fake}/sent.txt"
         return r, (open(sent).read() if os.path.exists(sent) else "")
+
+    def day(self, ago):
+        return (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=ago)).strftime("%Y-%m-%d")
+
+    def ledger(self, *items):
+        """items are (days_ago, project, ref, what) open items; a string is written as given (e.g. a done item)."""
+        lines = [i if isinstance(i, str) else f"- [ ] {self.day(i[0])} | {i[1]} | {i[2]} | {i[3]} | 1. do it 2. reply | agent carries on"
+                 for i in items]
+        write(f"{self.d}/ledger.md", "# Founder actions\n\nFormat and rules: elsewhere.\n\n" + "\n".join(lines) + "\n")
+
+    def needs(self, sent):
+        """The 'Needs you' part of the first message sent."""
+        return sent.split("\n----")[0].partition("3. Needs you")[2]
+
+    def blocked(self, *rows):
+        write(f"{self.fake}/tracker.json", json.dumps({"next": {"kind": "NONE"}, "changes": [], "blocked": [
+            {"task": t, "title": ti, "status": "Blocked", "pr": pr, "blocker": b, "updated": ""} for t, ti, pr, b in rows]}))
 
     def test_finished_merged_and_blocked(self):
         self.conf("TRACKER_REPO=acme/tracker\nVERDICT_NOTE='Tests green and merged, not deployed.'\n")
@@ -448,6 +466,121 @@ class VerdictThreeFacts(unittest.TestCase):
         _, sent = self.run_verdict()
         self.assertRegex(sent, r"3\. Needs you: [1-9]")
         self.assertIn("tracker", sent.lower())
+
+    def test_ledger_items_are_listed_for_their_own_group_only(self):
+        self.conf()
+        write(f"{self.defs}/other.conf", self.CONF.replace("VERDICT=demo", "VERDICT=other"))
+        write(f"{self.defs}/routines.env", "AUTHOR=bot\nPROJ_demo=Demo\nPROJ_other=\"Other Co\"\n")
+        self.ledger((14, "demo", "https://github.com/acme/app/issues/3", "Pick the demo provider"),
+                    (3, "other-co", "https://github.com/acme/other/issues/9", "Sign the other contract"))
+        _, sent = self.run_verdict("demo")
+        self.assertIn("3. Needs you: 1.", sent)
+        self.assertIn("1) Pick the demo provider (14d) https://github.com/acme/app/issues/3", sent)
+        self.assertNotIn("other contract", sent)
+        os.remove(f"{self.fake}/sent.txt")
+        _, sent = self.run_verdict("other")  # "Other Co" in routines.env matches the ledger's other-co: case and punctuation do not count
+        self.assertIn("1) Sign the other contract (3d) https://github.com/acme/other/issues/9", sent)
+        self.assertNotIn("demo provider", sent)
+
+    def test_ledger_project_in_the_conf_wins_over_the_display_name(self):
+        self.conf("LEDGER_PROJECT=acme-shop\n")
+        self.ledger((2, "acme-shop", "app#1", "Approve the shop copy"), (2, "demo", "app#2", "Not mine"))
+        _, sent = self.run_verdict()
+        self.assertIn("1) Approve the shop copy (2d)", sent)
+        self.assertNotIn("Not mine", sent)
+
+    def test_done_ledger_items_are_skipped(self):
+        self.conf()
+        self.ledger(f"- [x] {self.day(9)} | demo | app#4 | (done by agent) Old ask | 1. x | y", (5, "demo", "app#5", "Open ask"),
+                    f"- [X] {self.day(9)} | demo | app#6 | Capital X is not an open item | 1. x | y")
+        _, sent = self.run_verdict()
+        self.assertIn("3. Needs you: 1.", sent)
+        self.assertIn("1) Open ask (5d)", sent)
+        self.assertNotIn("Old ask", sent)
+        self.assertNotIn("Capital X", sent)
+
+    def test_missing_or_unreadable_ledger_is_no_items_and_no_error(self):
+        self.conf()
+        r, sent = self.run_verdict()  # no ledger file written
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("3. Needs you: nothing.", sent)
+        os.remove(f"{self.fake}/sent.txt")
+        os.makedirs(f"{self.d}/ledger.md")  # a directory cannot be read as a file
+        r, sent = self.run_verdict()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("3. Needs you: nothing.", sent)
+
+    def test_ledger_item_and_tracker_row_for_the_same_thing_are_listed_once(self):
+        self.conf("TRACKER_REPO=acme/tracker\nCODE_REPO=acme/app\n")
+        self.blocked(("T-002", "Pick a provider", "", "needs founder: choose a provider"),     # named by task id
+                     ("#39", "Unknown app on the webhook", "", "issue label agent:blocked"),   # named as app#39 (the code repo ends in app)
+                     ("T-010", "Ship the thing", "#7", "needs founder: look at the PR"),       # named by its PR URL
+                     ("#40", "Another issue", "", "issue label agent:blocked"),                # app#40 is not named: other#40 is another repo
+                     ("T-003", "Not in the ledger", "", "needs founder: sign off"))
+        self.ledger((8, "demo", "T-002 (PR #50)", "Choose the provider"),
+                    (7, "demo", "app#39", "Decide on the unknown webhook app"),
+                    (6, "demo", "https://github.com/acme/app/pull/7", "Review the ship PR"),
+                    (5, "demo", "other#40", "A different repo's issue 40"))
+        _, sent = self.run_verdict()
+        n = self.needs(sent)
+        self.assertIn("3. Needs you: 6.", sent)
+        self.assertEqual(n.count("choose a provider"), 0)  # the tracker row's blocker text: the ledger line won
+        self.assertEqual(n.count("Choose the provider"), 1)
+        self.assertEqual(n.count("Decide on the unknown webhook app"), 1)
+        self.assertNotIn("Unknown app on the webhook", n)
+        self.assertEqual(n.count("Review the ship PR"), 1)
+        self.assertNotIn("Ship the thing", n)
+        self.assertIn("Another issue", n)       # the row stays: only a different repo's #40 is in the ledger
+        self.assertIn("A different repo's issue 40", n)
+        self.assertIn("T-003 Not in the ledger: needs founder: sign off", n)
+        # the ledger line without a URL of its own takes the tracker row's link; one with a URL keeps it
+        self.assertIn("Decide on the unknown webhook app (7d) https://github.com/acme/app/issues/39", n)
+        self.assertIn("Review the ship PR (6d) https://github.com/acme/app/pull/7", n)
+        self.assertEqual(n.count("https://github.com/acme/app/pull/7"), 1)
+
+    def test_tracker_row_with_a_pr_links_to_it_and_lists_oldest_first(self):
+        self.conf("TRACKER_REPO=acme/tracker\nCODE_REPO=acme/app\n")
+        self.blocked(("T-010", "Ship the thing", "#7", "needs founder: look at the PR"))
+        self.ledger((20, "demo", "x", "Oldest ledger ask"), (1, "demo", "x", "Newest ledger ask"))
+        _, sent = self.run_verdict()
+        lines = [l for l in self.needs(sent).splitlines() if l[:2] in ("1)", "2)", "3)")]
+        self.assertEqual(len(lines), 3, sent)
+        self.assertTrue(lines[0].startswith("1) Oldest ledger ask (20d)"), lines)
+        self.assertTrue(lines[1].startswith("2) Newest ledger ask (1d)"), lines)
+        self.assertEqual(lines[2], "3) T-010 Ship the thing: needs founder: look at the PR https://github.com/acme/app/pull/7")  # no age: not dated
+
+    def test_failing_pr_and_ledger_item_share_one_numbered_list(self):
+        self.conf()
+        draft = self.pr(8, "feat: add gadget", state="OPEN")
+        draft["isDraft"] = True
+        self.set_prs([draft])
+        self.ledger((4, "demo", "x", "Send the keys"))
+        _, sent = self.run_verdict()
+        self.assertIn("3. Needs you: 2.", sent)
+        self.assertIn("1) add gadget: it is still a draft https://github.com/acme/app/pull/8", sent)
+        self.assertIn("2) Send the keys (4d)", sent)
+
+    def test_at_most_ten_lines_then_plus_n_more(self):
+        self.conf()
+        self.ledger(*[(30 - i, "demo", "x", f"Ask number {i:02d}") for i in range(12)])
+        _, sent = self.run_verdict()
+        n = self.needs(sent)
+        self.assertIn("3. Needs you: 12.", sent)
+        numbered = [l for l in n.splitlines() if l[:1].isdigit() and ") " in l[:4]]
+        self.assertEqual(len(numbered), 10, n)
+        self.assertTrue(numbered[0].startswith("1) Ask number 00 (30d)"), numbered)  # oldest first
+        self.assertTrue(numbered[9].startswith("10) Ask number 09 (21d)"), numbered)
+        self.assertNotIn("Ask number 10", n)
+        self.assertEqual(n.strip().splitlines()[-1], "+2 more")
+
+    def test_long_text_is_cut_and_a_non_url_ref_adds_no_link(self):
+        self.conf()
+        self.ledger((1, "demo", "api#9", "Long " + "word " * 40))
+        _, sent = self.run_verdict()
+        line = [l for l in sent.splitlines() if l.startswith("1) Long")][0]
+        self.assertLessEqual(len(line), 3 + 90 + len(" (1d)"), line)
+        self.assertTrue(line.endswith("… (1d)"), line)
+        self.assertNotIn("http", line)
 
     def test_dry_run_prints_instead_of_sending(self):
         self.conf()
