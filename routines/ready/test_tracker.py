@@ -854,5 +854,58 @@ class AddTask(Sandbox):
         self.assertEqual(self.rows()["#300"]["Title"], "Idea")
 
 
+class Unblock(Sandbox):
+    """`tracker unblock`: his answer to a Blocked row (or a block that no longer holds) puts it back in the queue, whoever holds it.
+    2026-11-07: six BH rows sat Blocked on "an earlier session left uncommitted work" after that work was saved, and only a hand edit
+    of the CSV could clear them, so `next` found nothing to build."""
+    NOTES = HEADER + ["Notes"]
+
+    def blocked(self, task, **kw):
+        return row(task, status="Blocked", Holder="old:run:abc", Environment="vps", Run="run9", Updated=ago(30),
+                   Blocker="needs founder: resume that session, or take the work over?", **kw)
+
+    def test_50_row_with_a_branch_becomes_a_leftover_and_keeps_the_answer(self):
+        self.put([self.blocked("T-101", Branch="feat/t101-thing", PR="34", Notes="spec")], header=self.NOTES)
+        r = self.tracker("unblock", "T-101", "--note", "take it  over", who="B")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "unblocked T-101: leftover, `next` resumes feat/t101-thing first")
+        got = self.rows()["T-101"]
+        self.assertEqual((got["Status"], got["Holder"], got["Environment"], got["Run"], got["Blocker"], got["Updated"]),
+                         ("Building", "", "", "", "", ""))
+        self.assertEqual((got["Branch"], got["PR"]), ("feat/t101-thing", "34"))
+        self.assertRegex(got["Notes"], r"^spec\nAnswer \d{4}-\d\d-\d\d: take it over$")
+        self.assertIn("LEFTOVER T-101", self.tracker("next").stdout)
+
+    def test_51_row_without_a_branch_goes_back_to_not_started(self):
+        self.put([self.blocked("T-102")])
+        r = self.tracker("unblock", "T-102")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "unblocked T-102: Not started, ready for the next build")
+        got = self.rows()["T-102"]
+        self.assertEqual((got["Status"], got["Holder"], got["Blocker"], got["Updated"]), ("Not started", "", "", ""))
+        self.assertEqual(self.tracker("next").stdout.splitlines()[0], "NEXT NEW T-102")
+
+    def test_52_refuses_a_row_that_is_not_blocked_or_a_note_with_nowhere_to_go(self):
+        self.put([row("T-103"), self.blocked("T-104")])
+        before = readf(os.path.join(self.fake, "tracker.csv"), "rb")
+        r = self.tracker("unblock", "T-103")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("T-103 is Not started, not Blocked", r.stderr)
+        r = self.tracker("unblock", "T-104", "--note", "answer")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("no notes column", r.stderr)
+        self.assertEqual(readf(os.path.join(self.fake, "tracker.csv"), "rb"), before)
+        self.assertNotIn("-X PUT", self.log("gh.log"))
+
+    def test_53_issue_label_block_points_at_the_label(self):
+        self.conf_extra = "ISSUE_IMPORT=1\n"
+        self.write_conf()
+        self.put([row("#246", status="Blocked", Blocker="issue label agent:blocked")], header=IssueImport.COLS)
+        r = self.tracker("unblock", "#246")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("gh issue edit 246 -R acme/app --remove-label agent:blocked --add-label agent:ready", r.stderr)
+        self.assertNotIn("-X PUT", self.log("gh.log"))
+
+
 if __name__ == "__main__":
     unittest.main()

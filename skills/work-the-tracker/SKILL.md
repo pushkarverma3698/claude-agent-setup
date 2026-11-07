@@ -1,6 +1,6 @@
 ---
 name: work-the-tracker
-description: Use when told "work the tracker" (phone, laptop or a scheduled routine), or asked to pick up the next task from a project's task tracker. Runs `tracker next`, claims one task, builds it to a reviewed PR, and records progress in the tracker so no two sessions work the same task. Also use when he gives an idea to queue ("idea: ... for BH", "add task: ... to oplify", "later: ...", "remember to build ..."): `tracker add` puts it in that project's tracker.
+description: Use when told "work the tracker" (phone, laptop or a scheduled routine), or asked to pick up the next task from a project's task tracker. Runs `tracker next`, claims one task, builds it to a reviewed PR, and records progress in the tracker so no two sessions work the same task. Also use when he gives an idea to queue ("idea: ... for BH", "add task: ... to oplify", "later: ...", "remember to build ..."): `tracker add` puts it in that project's tracker. And when he answers a blocked task ("T-160: take it over", "T-143: restore boosts and credits"): `tracker unblock`.
 ---
 
 # Work the tracker
@@ -34,3 +34,12 @@ Triggers: "idea: ...", "add task ...", "later: ...", "remember to build ...". Qu
 3. Reply in one line with the id and the link it printed: `Added T-404: <title> <link>`. For an oplify issue it prints `#123` and the issue link; the row appears at the next `tracker sync`.
 
 Exit 2 "no notes column": run it again with everything in the title. Never edit the CSV or open the issue by hand. Add `--dry-run` to see what would be written.
+
+## Answering a blocked task
+
+Triggers: he replies to a "Needs you" item with a task id and an answer ("T-160: take it over", "T-303: park it", "T-143: restore boosts and credits").
+
+1. `tracker unblock --conf /etc/claude-routines/<name>.conf T-160 --note "<his answer>"`. The answer lands in the notes column for the next builder. A row with a branch becomes a leftover, so the next build resumes that branch first.
+2. Reply in one line with what it printed.
+
+A block whose reason is plainly gone (the work it waited on is merged or saved) may be unblocked without asking; say so in the reply. Exit 2 "blocked by its issue label": run the `gh issue edit` it prints.
