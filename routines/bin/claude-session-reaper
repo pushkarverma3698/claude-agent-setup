@@ -7,13 +7,10 @@
 # subagent/tool-result dir), NOT statusUpdatedAt (2026-10-25: the nightly update re-stamps that on
 # every idle session at ~21:35Z, so no clock on it ever ran out and sessions lived for days). A
 # session with no transcript counts from startedAt. The status field is not trusted either way.
-# Every stop or kill is sent to Telegram through /usr/local/bin/claude-notify when that exists.
+# Stops and kills go to the journal only (2026-11-07: they were 55% of the founder's Telegram and none needed him).
 # Written by setup-claude-remote on the founder's laptop; edit it there.
 set -uo pipefail
-[ -r /etc/claude-routines/routines.env ] && . /etc/claude-routines/routines.env   # optional: HOST_LABEL, REVIEW_KEEP, TESTDB_CONTAINER (2026-11-02, was hard-coded)
-label="${HOST_LABEL:-$(hostname -s)}"
 hours="${IDLE_HOURS:-6}"; now=$(( $(date +%s) * 1000 )); cut=$((now - hours * 3600000)); n=0
-notify() { [ "${DRY_RUN:-0}" = 1 ] || [ ! -x /usr/local/bin/claude-notify ] || timeout 30 /usr/local/bin/claude-notify "$label reaper: $1" >/dev/null 2>&1 || true; }
 last_active() { # last_active <config dir> <sessionId> <startedAt ms> -> ms
   local t; t=$(find "$1"/projects/*/"$2"* -type f -printf '%T@\n' 2>/dev/null | sort -n | tail -1)
   if [ -n "$t" ]; then echo $(( ${t%.*} * 1000 )); else echo "$3"; fi
@@ -30,7 +27,7 @@ for f in /home/claude-agent/.claude{,-alt,-alt2}/sessions/*.json; do
   age=$(( (now - at) / 3600000 )); unit=$(sed -n 's#.*/claude.slice/##p' "/proc/$pid/cgroup")
   if [ "${DRY_RUN:-0}" = 1 ]; then echo "would stop $pid ($unit, no activity ${age}h)"; continue; fi
   pkill -TERM -P "$pid"
-  if kill -TERM "$pid"; then n=$((n + 1)); echo "stopped $pid ($unit, no activity ${age}h)"; notify "stopped idle session $pid ($unit), no activity for ${age}h"; fi
+  if kill -TERM "$pid"; then n=$((n + 1)); echo "stopped $pid ($unit, no activity ${age}h)"; fi
 done
 echo "reaper: $n stopped (no activity > ${hours}h)"
 
@@ -60,7 +57,7 @@ what() { local c; c=$(pgrep -P "$1" | head -1); ps -o args= -p "${c:-$1}" 2>/dev
 kill_tree() { # kill_tree <pid> <reason>
   if has_git "$1"; then echo "kept job $1 ($2): it contains git, not killed"; return; fi
   if [ "${DRY_RUN:-0}" = 1 ]; then echo "would kill job $1 ($2): $(what "$1")"; return; fi
-  echo "killed job $1 ($2): $(what "$1")"; notify "killed tool job $1 ($2): $(what "$1")"
+  echo "killed job $1 ($2): $(what "$1")"
   local t; t=$(tree "$1"); kill -TERM $t 2>/dev/null; k=$((k + 1))
   # 2026-10-25: the tsx dev workers trap SIGTERM and never finish shutting down; KILL after 10s.
   sleep 10; kill -KILL $t 2>/dev/null || true
