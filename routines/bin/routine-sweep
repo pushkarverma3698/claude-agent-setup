@@ -6,7 +6,8 @@
 #   - leftovers: rows that are active but past their lease. Runs `claude-routine <name>`, which skips itself while the
 #     routine's lead is still working (live_run, a record under 45 min old) and which probes the account when PROFILE
 #     is a comma list. Not repeated here. New work stays with the routine's own SCHEDULE.
-#   - Blocked rows: re-sent daily (marker per row + reason + day) until the row changes. `tracker block` sent the first one.
+#   - Blocked rows: not sent here. `tracker block` sends the first notice and routine-verdict lists them daily under
+#     "Needs you" (2026-11-07: the daily re-send here was 66 messages a week, the same row reaching him up to 4 ways a day).
 # --dry-run prints each decision and starts, sends and writes nothing (`tracker next` still repairs tracker drift, as always).
 # 2026-10-31: replaces resume_one, which guessed from a session's state file and transcript why a run stopped; the tracker
 # row says it (a leftover is a lease past 6 h), and that holds for phone and laptop runs too.
@@ -48,16 +49,6 @@ dead_runs() { # dead_runs <name> <profiles> <next json>
   done
 }
 
-blocked_rows() { # blocked_rows <name> <next json>: re-send daily; skipped when the row changed in the last 20 h (tracker block just sent it)
-  local n=$1 json=$2 row f key
-  while read -r row; do
-    f() { jq -r --arg k "$1" '.[$k] // ""' <<<"$row"; }
-    [ "$(jq -r '.age_s' <<<"$row")" -ge 72000 ] || continue
-    key="blocked-$n-$(f task)-$(printf %s "$(f blocker)" | cksum | cut -d' ' -f1)-$(date -u +%F)"
-    notify "$key" "STILL BLOCKED $n $(f task) - $(f title)"$'\n'"$(f blocker)"$'\n'"environment: $(f environment | sed 's/^$/-/')  run: $(f run | sed 's/^$/-/')"$'\n'"branch: $(f branch | sed 's/^$/-/')  PR: $(f pr | sed 's/^$/-/')"$'\n'"(sent again every day until the row changes)"
-  done < <(jq -c '.blocked[] | . + {age_s: (try ((now - ((.updated // "") | sub("Z$"; ":00Z") | fromdateiso8601)) | floor) catch 999999999)}' <<<"$json")
-}
-
 sweep_one() { # sweep_one <conf>
   local c=$1 n json left
   n=$(basename "$c" .conf)
@@ -67,7 +58,6 @@ sweep_one() { # sweep_one <conf>
     json=$(tracker next --json --conf "$c") || { say "skip $n: tracker next failed (exit $?)" >&2; exit 1; }
     jq -e . >/dev/null 2>&1 <<<"$json" || { say "skip $n: tracker next printed no JSON" >&2; exit 1; }
     dead_runs "$n" "${PROFILE:-main}" "$json"
-    blocked_rows "$n" "$json"
     left=$(jq -r '[.leftover[].task] | join(", ")' <<<"$json")
     if [ -z "$left" ]; then say "skip $n: no leftovers"; exit 0; fi
     if [ $dry = 1 ]; then say "would start $n: leftovers $left (claude-routine skips it if a lead is live)"; exit 0; fi
