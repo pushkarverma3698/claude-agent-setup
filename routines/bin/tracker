@@ -4,6 +4,7 @@
   tracker sync | next [--json] | claim T-NNN [--slug s] [--worktree P] | beat T-NNN [--status S] [--pr N] [--next TXT]
   tracker block T-NNN "<text>" --needs founder|stakeholder | done T-NNN --pr N | release T-NNN | check [T-NNN] | migrate
   tracker add "<title>" [--notes TXT] [--dry-run]   queue a new task (a new row, or a new GitHub issue when ISSUE_IMPORT=1)
+  tracker unblock T-NNN [--note TXT]   his answer to a Blocked row: back in the queue (a leftover when it has a branch)
   every command takes --project NAME (or $TRACKER_PROJECT) or --conf PATH.
 
 Phone, laptop and VPS routine run the same commands; only this tool writes the CSV, through `gh api` (the contents API),
@@ -845,16 +846,22 @@ def next_id(t):
     return new
 
 
+def notes_col(t, text, hint):
+    """The column free text goes in: the conf's NOTES_COL, else the first of NOTES_COLS the file has. None when there is no text."""
+    want = [t.cfg["NOTES_COL"]] if t.cfg.get("NOTES_COL") else NOTES_COLS
+    col = next((c for c in want if t.index(c) >= 0), None)
+    if text and not col:
+        raise Fail(2, f"the tracker has no notes column ({', '.join(want)}): set NOTES_COL in the conf, {hint}")
+    return col
+
+
 def add_row(t, title, notes):
     """Append a Not started row to t: the next id, the title, the notes, the ROW_FILTER value (or `next` would ignore it), and the
     ORDER_COLS values of the row that sorts last, so the new task is picked after the planned work, not before it."""
     cfg = t.cfg
     if t.index(cfg["TITLE_COL"]) < 0:
         raise Fail(2, f"tracker CSV has no '{cfg['TITLE_COL']}' column")
-    want = [cfg["NOTES_COL"]] if cfg.get("NOTES_COL") else NOTES_COLS
-    ncol = next((c for c in want if t.index(c) >= 0), None)
-    if notes and not ncol:
-        raise Fail(2, f"the tracker has no notes column ({', '.join(want)}): set NOTES_COL in the conf, or put the text in the title")
+    ncol = notes_col(t, notes, "or put the text in the title")
     last = max(t.rows(), key=t.order, default=None)
     tid = next_id(t)
     rec = new_rec(t)
@@ -914,6 +921,33 @@ def cmd_add(cfg, a):
     print(f"added {tid}: {title}\n{tracker_url(cfg)}")
 
 
+def cmd_unblock(cfg, a):
+    """His answer to a Blocked row, or a block that no longer holds: back in the queue, whoever held it. A row with a branch becomes a
+    leftover, so `next` hands that branch to the next builder first; one without goes back to Not started. --note is kept in the notes column."""
+    note = " ".join((a.note or "").split())
+
+    def fn(t):
+        rec = need_row(t, a.task)
+        st, was = t.status(rec), t.get(rec, "Blocker")
+        if st != "Blocked":
+            raise Fail(2, f"{a.task} is {st or 'empty'}, not Blocked")
+        if cfg.get("ISSUE_IMPORT") == "1" and was.startswith("issue label "):  # the label is the truth: the next sync would re-block the row
+            raise Fail(2, f"{a.task} is blocked by its issue label: gh issue edit {a.task.lstrip('#')} -R {cfg['ISSUE_REPO']} "
+                          f"--remove-label {was[len('issue label '):]} --add-label agent:ready, then tracker sync")
+        if note:
+            col = notes_col(t, note, "or drop --note")
+            old = t.get(rec, col)
+            t.set(rec, col, (old + "\n" if old else "") + f"Answer {stamp()[:10]}: {note}")
+        if t.get(rec, "Branch"):
+            t.setmany(rec, Status="Building", Holder="", Environment="", Run="", Blocker="", Updated="")
+        else:
+            t.setmany(rec, Status="Not started", **{k.replace(" ", "_"): "" for k in AGENT_COLS})
+        return True, (t.state(rec), t.get(rec, "Branch"))
+    state, branch = mutate(cfg, f"tracker: unblock {a.task} ({identity(cfg)[2]})", fn)[0]
+    print(f"unblocked {a.task}: " + {"leftover": f"leftover, `next` resumes {branch} first", "new": "Not started, ready for the next build"}
+          .get(state, "Not started, still waiting on its dependencies"))
+
+
 def cmd_check(args):
     gd = git_dir(os.getcwd())
     claim = gd and read_claim(gd)
@@ -953,6 +987,8 @@ def main(argv=None):
     add("check").add_argument("task", nargs="?")
     n = add("add")
     n.add_argument("title"), n.add_argument("--notes"), n.add_argument("--dry-run", action="store_true")
+    u = add("unblock")
+    u.add_argument("task"), u.add_argument("--note")
     try:
         args = p.parse_args(argv)
         if args.cmd == "check":
