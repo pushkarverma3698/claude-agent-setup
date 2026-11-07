@@ -1,6 +1,6 @@
 ---
 name: work-the-tracker
-description: Use when told "work the tracker" (phone, laptop or a scheduled routine), or asked to pick up the next task from a project's task tracker. Runs `tracker next`, claims one task, builds it to a reviewed PR, and records progress in the tracker so no two sessions work the same task.
+description: Use when told "work the tracker" (phone, laptop or a scheduled routine), or asked to pick up the next task from a project's task tracker. Runs `tracker next`, claims one task, builds it to a reviewed PR, and records progress in the tracker so no two sessions work the same task. Also use when he gives an idea to queue ("idea: ... for BH", "add task: ... to oplify", "later: ...", "remember to build ..."): `tracker add` puts it in that project's tracker.
 ---
 
 # Work the tracker
@@ -24,3 +24,13 @@ Exit 5 from any command, or a push refused with "taken over": another session to
 If the project imports GitHub issues (`ISSUE_IMPORT=1`), ids look like `#246` and `tracker sync` refreshes the rows from the issues first; a NOT READY row names the open blocker. Close the issue (`Closes #246` in the PR) rather than editing the row.
 
 Examples use `T-12` and PR 34; the real ids come from `tracker next`.
+
+## Adding work from the phone
+
+Triggers: "idea: ...", "add task ...", "later: ...", "remember to build ...". Queue it; do not build it now.
+
+1. Pick the project from his words (BH is `bh-morning`; oplify has an api and an app conf). List them with `ls /etc/claude-routines/*.conf`. Ask one question only if two fit or none does, then wait.
+2. `tracker add --conf /etc/claude-routines/<name>.conf "<title>" --notes "<the rest of what he said>"`. The title is his words in under 80 characters; drop `--notes` if there is nothing more.
+3. Reply in one line with the id and the link it printed: `Added T-404: <title> <link>`. For an oplify issue it prints `#123` and the issue link; the row appears at the next `tracker sync`.
+
+Exit 2 "no notes column": run it again with everything in the title. Never edit the CSV or open the issue by hand. Add `--dry-run` to see what would be written.

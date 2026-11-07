@@ -46,6 +46,9 @@ elif a[0] == "api" and "/contents/" in " ".join(a):
     raw = open(csvp, "rb").read()
     b64 = base64.encodebytes(raw).decode()
     print(json.dumps({"sha": sha(raw), "encoding": "base64", "content": b64}))
+elif a[:2] == ["issue", "create"]:
+    open(D + "/created.json", "a").write(json.dumps(a) + "\n")
+    print("https://github.com/" + a[a.index("-R") + 1] + "/issues/300")
 elif a[:2] == ["issue", "list"]:
     repo, state = a[a.index("-R") + 1], a[a.index("--state") + 1]
     allis = json.load(open(D + "/issues.json")).get(repo, [])
@@ -702,6 +705,153 @@ class IssueImport(Sandbox):
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "nothing to sync"))
         self.assertEqual(readf(os.path.join(self.fake, "tracker.csv"), "rb"), before)
         self.assertNotIn("issue list", self.log("gh.log"))
+
+
+class AddTask(Sandbox):
+    """`tracker add`: a CSV row through the same compare-and-swap write, or a GitHub issue when ISSUE_IMPORT=1."""
+    NOTES = HEADER + ["Notes"]
+    LINK = "https://github.com/acme/tracker/blob/main/backlog.csv"
+
+    def csv_bytes(self):
+        return readf(os.path.join(self.fake, "tracker.csv"), "rb")
+
+    def created(self):
+        p = os.path.join(self.fake, "created.json")
+        return [json.loads(l) for l in readf(p).splitlines()] if os.path.exists(p) else []
+
+    def test_30_adds_next_id_not_started_notes_and_sorts_after_the_planned_work(self):
+        self.put([row("T-101", "First", Milestone="M1"), row("T-102", "Later", Milestone="M3"), row("T-110", "Finished", status="Done", Milestone="M2")],
+                 header=self.NOTES)
+        before = self.csv_bytes()
+        r = self.tracker("add", "  A new   idea ", "--notes", "line one, with comma\nline \"two\"")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines(), ["added T-111: A new idea", self.LINK])
+        new = self.rows()["T-111"]
+        self.assertEqual((new["Title"], new["Status"], new["Notes"], new["Holder"], new["Milestone"]),
+                         ("A new idea", "Not started", 'line one, with comma\nline "two"', "", "M3"))
+        self.assertEqual(self.log("gh.log").count("-X PUT"), 1)
+        self.assertTrue(self.csv_bytes().startswith(before))  # every other row is untouched
+        nxt = self.tracker("next").stdout.splitlines()
+        self.assertEqual(nxt[0], "NEXT NEW T-101")
+        self.assertEqual([l for l in nxt if l.startswith("NEW")], ["NEW T-101 | First", "NEW T-102 | Later", "NEW T-111 | A new idea"])
+
+    def test_31_id_keeps_the_files_own_format(self):
+        self.put([row("T-007"), row("T-009", status="Done")])
+        self.assertEqual(self.tracker("add", "x").stdout.splitlines()[0], "added T-010: x")
+        self.put([row("T-099")])
+        self.assertEqual(self.tracker("add", "y").stdout.splitlines()[0], "added T-100: y")
+        self.put([row("T-8"), row("T-12")])
+        self.assertEqual(self.tracker("add", "z").stdout.splitlines()[0], "added T-13: z")
+        self.put([])
+        self.assertEqual(self.tracker("add", "first").stdout.splitlines()[0], "added T-1: first")
+
+    def test_32_row_filter_value_is_set_so_next_sees_the_row(self):
+        self.conf_extra = "ROW_FILTER=owner=eng\n"
+        self.write_conf()
+        self.put([row("T-300", "Not ours", Owner="Design"), row("T-200", "Ours")])
+        r = self.tracker("add", "Idea")
+        self.assertEqual(r.stdout.splitlines()[0], "added T-301: Idea", r.stderr)  # ids are shared with the rows the filter hides
+        self.assertEqual(self.rows()["T-301"]["Owner"], "eng")
+        self.assertIn("NEW T-301 | Idea", self.tracker("next").stdout.splitlines())
+
+    def test_33_notes_need_a_column_and_the_conf_can_name_it(self):
+        self.put([row("T-101")])
+        before = self.csv_bytes()
+        r = self.tracker("add", "Idea", "--notes", "details")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("no notes column", r.stderr)
+        self.assertEqual(self.csv_bytes(), before)
+        self.assertEqual(self.tracker("add", "Idea").returncode, 0)  # no notes: no column needed
+        self.conf_extra = "NOTES_COL='Open Qs'\n"
+        self.write_conf()
+        self.assertEqual(self.tracker("add", "Second", "--notes", "details").returncode, 0)
+        self.assertEqual(self.rows()["T-103"]["Open Qs"], "details")
+
+    def test_34_crlf_file_without_final_newline_is_kept(self):
+        text = render([row("T-101", "Keep, this")], eol="\r\n").rstrip("\r\n")
+        writef(os.path.join(self.fake, "tracker.csv"), text, "w")
+        self.assertEqual(self.tracker("add", "Idea").returncode, 0)
+        out = self.csv_bytes().decode()
+        self.assertTrue(out.startswith(text + "\r\n"))
+        self.assertTrue(out.endswith("\r\n"))
+        self.assertEqual(self.rows()["T-102"]["Title"], "Idea")
+
+    def test_35_dry_run_writes_nothing(self):
+        self.put([row("T-101")], header=self.NOTES)
+        before = self.csv_bytes()
+        r = self.tracker("add", "Idea", "--notes", "why", "--dry-run")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "dry run: would add T-102: Idea")
+        self.assertIn("Notes=why", r.stdout)
+        self.assertIn("Status=Not started", r.stdout)
+        self.assertEqual(self.csv_bytes(), before)
+        self.assertNotIn("PUT", self.log("gh.log"))
+
+    def test_36_empty_title_is_refused(self):
+        self.put([row("T-101")])
+        r = self.tracker("add", "   ")
+        self.assertEqual(r.returncode, 2)
+        self.assertNotIn("PUT", self.log("gh.log"))
+
+    def test_37_409_retry_picks_the_next_free_id_again(self):
+        self.put([row("T-101")])
+        race = os.path.join(self.d, "race.csv")
+        writef(race, render([row("T-101"), row("T-102", "Added by someone else")]))
+        r = self.tracker("add", "Mine", env={"FAKE_GH_RACE": race})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("sha conflict, retry 1/5", r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "added T-103: Mine")
+        self.assertEqual({k: v["Title"] for k, v in self.rows().items()}, {"T-101": "Thing", "T-102": "Added by someone else", "T-103": "Mine"})
+
+    def issue_conf(self, extra=""):
+        self.conf_extra = "ISSUE_IMPORT=1\n" + extra
+        self.write_conf()
+        self.put([row("#1", status="Done")], header=IssueImport.COLS)
+
+    def test_38_issue_import_opens_a_ready_issue_and_leaves_the_csv_alone(self):
+        self.issue_conf()
+        before = self.csv_bytes()
+        r = self.tracker("add", "Idea", "--notes", "why it matters")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines(), ["added #300: Idea", "https://github.com/acme/app/issues/300"])
+        self.assertEqual(self.created(), [["issue", "create", "-R", "acme/app", "--title", "Idea", "--body", "why it matters", "--label", "agent:ready"]])
+        self.assertEqual(self.csv_bytes(), before)
+        self.assertNotIn("PUT", self.log("gh.log"))
+        r = self.tracker("add", "No notes")
+        self.assertEqual(self.created()[-1][self.created()[-1].index("--body") + 1], "Added with `tracker add`.")
+
+    def test_39_issue_import_repo_and_label_follow_the_conf(self):
+        self.issue_conf("ISSUE_REPO=acme/other\nISSUE_STATUS='stuck=Blocked,todo=Not started'\n")
+        self.assertEqual(self.tracker("add", "Idea").returncode, 0)
+        self.assertEqual(self.created()[-1][2:4], ["-R", "acme/other"])
+        self.assertEqual(self.created()[-1][-2:], ["--label", "todo"])
+        self.issue_conf("ISSUE_STATUS='stuck=Blocked,*=Not started'\n")  # a catch-all imports any issue: no label needed
+        self.assertEqual(self.tracker("add", "Idea two").returncode, 0)
+        self.assertNotIn("--label", self.created()[-1])
+
+    def test_40_issue_import_without_a_ready_label_is_refused(self):
+        self.issue_conf("ISSUE_STATUS=stuck=Blocked\n")
+        r = self.tracker("add", "Idea")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("maps no label to Not started", r.stderr)
+        self.assertEqual(self.created(), [])
+
+    def test_41_issue_import_dry_run_creates_nothing(self):
+        self.issue_conf()
+        before = self.csv_bytes()
+        r = self.tracker("add", "Idea", "--notes", "why", "--dry-run")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "dry run: would create an issue in acme/app labelled agent:ready: Idea")
+        self.assertEqual(self.created(), [])
+        self.assertNotIn("issue create", self.log("gh.log"))
+        self.assertEqual(self.csv_bytes(), before)
+
+    def test_42_the_created_issue_is_imported_by_the_next_sync(self):
+        self.issue_conf()
+        self.assertEqual(self.tracker("add", "Idea").returncode, 0)
+        IssueImport.issues(self, open=[(300, "Idea", ["agent:ready"], "Added with `tracker add`.")])
+        self.assertEqual(self.tracker("sync").stdout.splitlines(), ["#300 added (Not started)"])
+        self.assertEqual(self.rows()["#300"]["Title"], "Idea")
 
 
 if __name__ == "__main__":
