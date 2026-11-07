@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# claude-wake-on-error: StopFailure hook (asyncRewake) for Remote Control sessions. A turn that dies on a login or
-# organisation error stays dead until someone types, and the retry watchdog does not retry it (2026-11-03: two phone
-# sessions sat 16 h on a 403 that had cleared long before anyone typed). This waits, then wakes the session with exit 2.
+# claude-wake-on-error: StopFailure hook (asyncRewake) for Remote Control sessions. A turn that dies on a login,
+# organisation or usage-limit (rate_limit) error stays dead until someone types, and the retry watchdog does not retry
+# it (2026-11-03: two phone sessions sat 16 h on a 403 that had cleared long before anyone typed; 2026-11-07: 59
+# "session limit" stops in 8 days waited for a person after the window reset). This waits, then wakes the session with exit 2.
 # Still failing: the new turn fails without spending tokens and this hook runs again. Only claude-remote@.service sets
 # CLAUDE_WAKE_ON_ERROR. Routines have routine-sweep; `claude -p` probes must fail fast.
 set -u
@@ -25,5 +26,5 @@ echo $(( n + 1 )) >"$dir/$session"
 
 sleep "$WAIT"
 last_is_error || exit 0
-echo "Automatic retry: the last turn stopped on a login or organisation error ($(jq -r '.error // "unknown"' <<<"$input")). Continue the task from where it stopped. If it was already finished, say so and stop." >&2
+echo "Automatic retry: the last turn stopped on an API error ($(jq -r '.error // "unknown"' <<<"$input")). Continue the task from where it stopped. If it was already finished, say so and stop." >&2
 exit 2
