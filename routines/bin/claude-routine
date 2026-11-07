@@ -26,6 +26,13 @@ notify() { local r; r=$(/usr/local/bin/claude-notify "$1" 2>&1) || true; logger 
 now_ist() { TZ=${NOTIFY_TZ:-UTC} date '+%H:%M'; }
 # One lock per routine, so two starts of the same routine do not replace each other's run.
 L=/home/claude-agent/.cache/claude-routine; mkdir -p "$L"
+# once_today <kind>: true the first time per routine and UTC day, so a failure repeated by the hourly sweep sends one
+# Telegram, not one an hour (2026-11-07: "did not start" went out 13 times in a day). Each attempt still reaches the journal.
+once_today() {
+  local m="$L/$name.$1-$(date -u +%F)"
+  [ ! -e "$m" ] || return 1
+  rm -f "$L/$name.$1-"*; : >"$m"
+}
 # 2026-10-29: probe_ok took any answer containing "ok" as usable ("OAuth token has expired" has "token") and an empty
 # one (120 s timeout, "529 overloaded") as out of usage: at 10:51 UTC alt2 and alt answered empty after a global OOM
 # and the run went to main on Opus. probe_verdict <answer> prints ok | auth | limit | retry.
@@ -109,7 +116,8 @@ model=default; args=("$@")
 for i in "${!args[@]}"; do if [ "${args[$i]}" = --model ]; then model=${args[$((i+1))]:-default}; fi; done
 started=0 why="" need="" nl=$'\n'
 trap 'rc=$?; if [ $rc -ne 0 ] && [ "$started" = 0 ]; then
-  notify "$(title_of "$name") — ${need:+you need to: $need}${need:-nothing needed from you unless it fails again tomorrow.}${nl}It did not start today ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC}): ${why:-it failed before starting (exit $rc)}. Next try: its next scheduled run."; fi' EXIT
+  if ! once_today notstarted; then logger -t claude-routine "$name did not start again (exit $rc): ${why:-failed before starting}; Telegram already sent today" 2>/dev/null || true
+  else notify "$(title_of "$name") — ${need:+you need to: $need}${need:-nothing needed from you unless it fails again tomorrow.}${nl}It did not start today ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC}): ${why:-it failed before starting (exit $rc)}. Next try: its next scheduled run."; fi; fi' EXIT
 
 exec 9>"$L/$name.lock"
 flock -w 200 9 || { why="the previous run was still being restarted and held it up for over 3 minutes"; need="start it again by hand from the Claude app if you want it today."; exit 75; }
@@ -163,7 +171,7 @@ for p in "${plist[@]}"; do
   [ ${#plist[@]} -gt 1 ] || { profile=$p; break; }
   if probe_ok; then profile=$p; break; fi
   echo "skip $(probe_msg "$p")"
-  [ "$probe_why" != auth ] || notify "$(title_of "$name") — you need to: run /login for the $(label_of "$p") account in the Claude app or on the server."$'\n'"Its login expired, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
+  [ "$probe_why" != auth ] || ! once_today "auth-$p" || notify "$(title_of "$name") — you need to: run /login for the $(label_of "$p") account in the Claude app or on the server."$'\n'"Its login expired, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
 done
 [ -n "$profile" ] || { why="no Claude account answered with usage left (out of usage, signed out or overloaded; see the journal)"; need="nothing now. Start it by hand once an account has usage again, if you want it before the next scheduled run.";  echo "claude-routine: $name not started, no account ($profiles) answered with usage left" >&2; exit 75; }
 source /usr/local/bin/claude-profile-env "$profile"

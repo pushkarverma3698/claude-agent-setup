@@ -164,6 +164,23 @@ class LiveRunGuard(unittest.TestCase):
         self.assertEqual(self.check("stopped", 1), "1")
 
 
+class OnceToday(unittest.TestCase):
+    """claude-routine once_today: a failure the hourly sweep repeats sends one Telegram a day (2026-11-07: 13 in a day)."""
+    def test_first_call_per_kind_and_day_only(self):
+        d = tempfile.mkdtemp()
+        try:
+            write(f"{d}/demo.notstarted-2000-01-01", "")
+            funcs = extract(ROUTINE, "once_today")
+            body = 'once_today notstarted; echo $?; once_today notstarted; echo $?; once_today auth-main; echo $?; ls "$L"'
+            r = subprocess.run(["bash", "-c", f'set -uo pipefail\nL={d} name=demo\n{funcs}\n{body}'],
+                               capture_output=True, text=True)
+            out = r.stdout.split()
+            self.assertEqual(out[:3], ["0", "1", "0"], r.stderr)
+            self.assertNotIn("demo.notstarted-2000-01-01", out, "yesterday's marker is removed")
+        finally:
+            shutil.rmtree(d)
+
+
 def load_holds():
     loader = importlib.machinery.SourceFileLoader("worktree_holds_t", HOLDS)
     spec = importlib.util.spec_from_loader(loader.name, loader)
