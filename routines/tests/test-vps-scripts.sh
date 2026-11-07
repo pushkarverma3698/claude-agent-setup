@@ -103,5 +103,6 @@ wake_n=0
 files=$(for f in $bins; do echo "$REPO/routines/bin/$f"; done; for f in $units; do echo "$REPO/routines/systemd/$f"; done)
 # shellcheck disable=SC2086
 ! grep -lniE 'oplify|founderos|bachelor|bh-verify|applyqa' $files >/dev/null && ok "no private names in the seven scripts or nine units" || bad "private name in: $(grep -lniE 'oplify|founderos|bachelor|bh-verify|applyqa' $files)"
+grep -q -- '--permission-mode $mode' "$REPO/routines/bin/claude-remote-serve" && grep -q 'REMOTE_PERMISSION_MODE:-bypassPermissions' "$REPO/routines/bin/claude-remote-serve" && ok "phone sessions spawn in bypassPermissions" || bad "remote-control permission mode not passed"
 grep -q 'HOST_LABEL' "$REPO/routines/bin/claude-remote-serve" && grep -q 'REVIEW_KEEP' "$REPO/routines/bin/claude-clutter-clean" && ok "host label and keep-list are read from routines.env" || bad "routines.env keys missing"
 [ "$fails" = 0 ] && echo "all ok" || { echo "$fails failed"; exit 1; }
