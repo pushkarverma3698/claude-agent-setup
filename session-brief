@@ -23,8 +23,10 @@
 # Testing: SESSION_BRIEF_NO_BRAIN=1 skips the brain; SESSION_BRIEF_NO_PULL=1 never pulls.
 set -uo pipefail
 _env="${AGENT_SETUP_ENV:-$HOME/.config/claude-agent-setup/env}"
+# 2>/dev/null: the desktop app exports names bash cannot hold (SENTRY-TRACE); re-declaring them printed
+# "not a valid identifier" into every session start (2026-11-07). Valid names are still restored.
 # shellcheck disable=SC1090
-[ -r "$_env" ] && { _keep=$(export -p); . "$_env"; eval "$_keep"; }
+[ -r "$_env" ] && { _keep=$(export -p); . "$_env"; eval "$_keep" 2>/dev/null; }
 BRIEF_BRAIN_FILE="${BRIEF_BRAIN_FILE:-}"; BRIEF_BRAIN_FILE="${BRIEF_BRAIN_FILE/#\~/$HOME}"
 PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
 
