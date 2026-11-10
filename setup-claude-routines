@@ -14,7 +14,7 @@
 #                   PROJ_<routine>=…, REPO_NAME_<verdict tag>=…; `-` in a name written as `_`) and AUTHOR=<github login>
 #                   (routine-verdict: whose PRs count).
 #     <name>.conf   bash fragment: PROFILE (main|alt|alt2, or a comma list such as alt,alt2,main: the
-#                   first account whose usage limit is not hit runs it), REPO (~/work/<REPO>), SCHEDULE
+#                   accounts tried round-robin, the first with usage left runs it), REPO (~/work/<REPO>), SCHEDULE
 #                   (space-separated HH:MM times, daily in SCHEDULE_TZ (default UTC): SCHEDULE="03:04 15:00" is one timer
 #                   with two OnCalendar lines; a string with a * or - is one systemd OnCalendar line, as before;
 #                   routines/bin/routine-schedule does the parsing), ARGS (extra claude flags, e.g. --model haiku --permission-mode dontAsk)

@@ -4,6 +4,8 @@
 # A comma list of profiles: the run goes to the first account that answers a one-word haiku call
 # (2026-10-25: a nightly run died at once with "You've hit your session limit" because the one
 # account it ran on had spent its 5-hour window during the day).
+# The list is tried round-robin across all routines (2026-11-10): each run starts at the account after the one the last
+# run started on ($L/last-profile), so the hourly sweep no longer drains the first-listed account while the rest sit idle.
 # claude-routine                 (list the routines)
 # Starts one routine run as a background Claude session with Remote Control, in its own git worktree at a fixed
 # path (~/work/wt/<name>, optional BASE=<branch> in the conf; default origin/HEAD). No `-w`: that flag put the
@@ -41,17 +43,18 @@ probe_verdict() {
   a=$(printf '%s' "$a" | tr -d '[:space:]'); a=${a%.}
   if [ "$a" = ok ]; then echo ok
   elif [[ "${1,,}" == *"/login"* || "${1,,}" == *"oauth token"* || "${1,,}" == *authentication* || "${1,,}" == *"invalid api key"* ]]; then echo auth
+  elif [[ "${1,,}" == *"past due"* || "${1,,}" == *"can't use your claude subscription"* ]]; then echo billing
   elif [[ "${1,,}" == *limit* ]]; then echo limit
   else echo retry; fi
 }
 # probe_ok: the sourced profile answers "ok" to a one-word haiku call. Sets $ans (last answer) and $probe_why:
-# limit (out of usage), auth (login expired), unknown (empty / overloaded / timeout twice, 30 s apart).
+# limit (out of usage), auth (login expired), billing (subscription unpaid), unknown (empty / overloaded / timeout twice, 30 s apart).
 probe_ok() {
   local try v; probe_why=
   for try in 1 2; do
     ans=$(cd /tmp && timeout 120 "$claude" -p --model haiku "Reply with the single word ok" </dev/null 2>&1 || true)
     v=$(probe_verdict "$ans")
-    case $v in ok) return 0;; limit|auth) probe_why=$v; return 1;; esac
+    case $v in ok) return 0;; limit|auth|billing) probe_why=$v; return 1;; esac
     [ $try = 2 ] || sleep "${PROBE_RETRY_SLEEP:-30}"
   done
   probe_why=unknown; return 1
@@ -59,9 +62,19 @@ probe_ok() {
 probe_msg() { # probe_msg <profile>: one plain line for the log
   case $probe_why in
     limit) echo "$1: out of usage" ;;
+    billing) echo "$1: subscription unusable, payment past due ($(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100))" ;;
     auth) echo "$1: login expired or invalid, run /login for this account ($(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100))" ;;
     *) echo "$1: no usable answer twice (empty, overloaded or timed out; not treated as out of usage): $(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100)" ;;
   esac
+}
+
+# rotate <last> <profile…>: the profiles starting after <last>, wrapping round; <last> not among them: the list as given.
+rotate() {
+  local last=$1 i j; shift; local a=("$@")
+  for ((i = 0; i < ${#a[@]}; i++)); do [ "${a[$i]}" != "$last" ] || break; done
+  [ "$i" -lt ${#a[@]} ] || { echo "$*"; return; }
+  local out=(); for ((j = 1; j <= ${#a[@]}; j++)); do out+=("${a[$(( (i + j) % ${#a[@]} ))]}"); done
+  echo "${out[*]}"
 }
 
 # Record timestamps, not mtimes (2026-10-29): the lead file's mtime moved at 07:04 with its last record at 06:25.
@@ -90,6 +103,13 @@ slot_busy() {
 if [ $# -eq 0 ]; then
   for c in "$D"/*.conf; do [ -e "$c" ] || continue; n=$(basename "$c" .conf)
     ( source "$c"; printf '%-28s %-14s %-24s %s\n' "$n" "$PROFILE" "$REPO" "$SCHEDULE" ); done
+  exit 0
+fi
+# claude-routine --order <name>: the account order its next run would try (no probe, no start).
+if [ "${1:-}" = --order ]; then
+  [ -f "$D/${2:-}.conf" ] || { echo "claude-routine: no routine ${2:-} in $D" >&2; exit 64; }
+  ( source "$D/$2.conf"; IFS=, read -ra pl <<<"$PROFILE"
+    echo "$2: next run tries $(rotate "$(cat "$L/last-profile" 2>/dev/null || true)" "${pl[@]}") (last run started on $(cat "$L/last-profile" 2>/dev/null || echo none))" )
   exit 0
 fi
 MODE= BASE= GOAL=
@@ -164,16 +184,19 @@ for w in "$W/$name" "$W/$name"-*; do
   else echo "kept $w: it has work that is not on GitHub"; fi
 done
 
-# The first listed account with usage left (probe_ok). A single profile is used as is.
+# The first account with usage left (probe_ok), tried round-robin from the one after the last run's. A single profile is used as is.
 profile=""
-for p in "${plist[@]}"; do
+read -ra order <<<"$(rotate "$(cat "$L/last-profile" 2>/dev/null || true)" "${plist[@]}")"
+for p in "${order[@]}"; do
   source /usr/local/bin/claude-profile-env "$p"
   [ ${#plist[@]} -gt 1 ] || { profile=$p; break; }
   if probe_ok; then profile=$p; break; fi
   echo "skip $(probe_msg "$p")"
+  [ "$probe_why" != billing ] || ! once_today "billing-$p" || notify "$(title_of "$name") — you need to: pay or renew the Claude subscription of the $(label_of "$p") account."$'\n'"Claude says its payment is past due, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
   [ "$probe_why" != auth ] || ! once_today "auth-$p" || notify "$(title_of "$name") — you need to: run /login for the $(label_of "$p") account in the Claude app or on the server."$'\n'"Its login expired, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
 done
 [ -n "$profile" ] || { why="no Claude account answered with usage left (out of usage, signed out or overloaded; see the journal)"; need="nothing now. Start it by hand once an account has usage again, if you want it before the next scheduled run.";  echo "claude-routine: $name not started, no account ($profiles) answered with usage left" >&2; exit 75; }
+[ ${#plist[@]} -lt 2 ] || echo "$profile" >"$L/last-profile"
 source /usr/local/bin/claude-profile-env "$profile"
 if [ "$MODE" = print ]; then
   # No --bg session: run once, headless, and send the final stdout ourselves. The model only prints.
