@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the 2026-10-29 routine audit fixes: python3 -m unittest test_routine_fixes
   - claude-routine probe_verdict / probe_ok: what a one-word haiku answer means (bash 4+, GNU date: run on the VPS)
+  - claude-routine rotate: the account list starts after the last run's account (round-robin, 2026-11-10)
   - claude-routine live_run: a working run with a record under 45 min old must not be stopped
   - worktree-holds --clean: a squash-merged worktree is clean; a routine worktree under work/wt/ holds nothing
   - routine-verdict: three facts per group (finished? merged + proof, needs you), idle prints idle, an all-PAUSED group is
@@ -131,6 +132,39 @@ class ProbeAnswers(unittest.TestCase):
     def test_limit_and_auth_do_not_retry(self):
         self.assertEqual(self.probe(["You've hit your session limit"]), (1, "limit", 1))
         self.assertEqual(self.probe(["OAuth token has expired. Please run /login"]), (1, "auth", 1))
+
+    def test_past_due_subscription_is_billing_and_does_not_retry(self):
+        # 2026-11-09: alt2 answered this every hour; as "retry" it cost 30 s a run and the founder was never told
+        msg = "Claude Code can't use your Claude subscription, usually because a payment is past due · Pay or renew"
+        self.assertEqual(self.verdict(msg), "billing")
+        self.assertEqual(self.probe([msg]), (1, "billing", 1))
+
+
+@unittest.skipUnless(gnu_bash(), "needs bash 4+ (the VPS)")
+class ProfileRotation(unittest.TestCase):
+    """2026-11-10: 20 of 21 routine runs in 4 days started on alt; each run now starts after the last run's account."""
+    def rotate(self, *args):
+        r = subprocess.run(["bash", "-c", "set -uo pipefail\n" + extract(ROUTINE, "rotate") + '\nrotate "$@"', "x", *args],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_starts_after_the_last_account_and_wraps(self):
+        self.assertEqual(self.rotate("alt", "alt", "alt2", "main"), "alt2 main alt")
+        self.assertEqual(self.rotate("alt2", "alt", "alt2", "main"), "main alt alt2")
+        self.assertEqual(self.rotate("main", "alt", "alt2", "main"), "alt alt2 main")
+        self.assertEqual(self.rotate("alt", "alt2", "alt", "main"), "main alt2 alt")
+
+    def test_unknown_or_no_last_keeps_the_conf_order(self):
+        self.assertEqual(self.rotate("", "alt", "alt2", "main"), "alt alt2 main")
+        self.assertEqual(self.rotate("main", "alt", "alt2"), "alt alt2")
+
+    def test_wiring(self):
+        with open(ROUTINE) as f:
+            src = f.read()
+        self.assertIn('read -ra order <<<"$(rotate "$(cat "$L/last-profile" 2>/dev/null || true)" "${plist[@]}")"', src)
+        self.assertIn('for p in "${order[@]}"; do', src)
+        self.assertIn('[ ${#plist[@]} -lt 2 ] || echo "$profile" >"$L/last-profile"', src)
 
 
 @unittest.skipUnless(gnu_bash(), "needs bash 4+ and GNU date (the VPS)")
