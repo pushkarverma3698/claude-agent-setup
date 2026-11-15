@@ -49,6 +49,12 @@ elif a[0] == "api" and "/contents/" in " ".join(a):
 elif a[:2] == ["issue", "create"]:
     open(D + "/created.json", "a").write(json.dumps(a) + "\n")
     print("https://github.com/" + a[a.index("-R") + 1] + "/issues/300")
+elif a[:2] == ["issue", "view"]:
+    allis = json.load(open(D + "/issues.json")).get(a[a.index("-R") + 1], [])
+    i = next(i for i in allis if str(i["number"]) == a[2])
+    print(json.dumps({"title": i["title"], "body": i["body"], "comments": i.get("comments", [])}))
+elif a[:2] == ["issue", "comment"]:
+    open(D + "/comments.json", "a").write(json.dumps(a) + "\n")
 elif a[:2] == ["issue", "list"]:
     repo, state = a[a.index("-R") + 1], a[a.index("--state") + 1]
     allis = json.load(open(D + "/issues.json")).get(repo, [])
@@ -817,16 +823,20 @@ class AddTask(Sandbox):
         self.assertEqual(self.created(), [["issue", "create", "-R", "acme/app", "--title", "Idea", "--body", "why it matters", "--label", "agent:ready"]])
         self.assertEqual(self.csv_bytes(), before)
         self.assertNotIn("PUT", self.log("gh.log"))
-        r = self.tracker("add", "No notes")
-        self.assertEqual(self.created()[-1][self.created()[-1].index("--body") + 1], "Added with `tracker add`.")
+        r = self.tracker("add", "No notes")  # nothing says what done looks like: filed, but labelled blocked, not ready
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("(labelled agent:blocked, not built until answered: no acceptance criteria)", r.stdout)
+        body = self.created()[-1][self.created()[-1].index("--body") + 1]
+        self.assertTrue(body.startswith("Added with `tracker add`.\n\nNot ready: no acceptance criteria."), body)
+        self.assertEqual(self.created()[-1][-2:], ["--label", "agent:blocked"])
 
     def test_39_issue_import_repo_and_label_follow_the_conf(self):
         self.issue_conf("ISSUE_REPO=acme/other\nISSUE_STATUS='stuck=Blocked,todo=Not started'\n")
-        self.assertEqual(self.tracker("add", "Idea").returncode, 0)
+        self.assertEqual(self.tracker("add", "Idea", "--notes", "Done when: it works").returncode, 0)
         self.assertEqual(self.created()[-1][2:4], ["-R", "acme/other"])
         self.assertEqual(self.created()[-1][-2:], ["--label", "todo"])
         self.issue_conf("ISSUE_STATUS='stuck=Blocked,*=Not started'\n")  # a catch-all imports any issue: no label needed
-        self.assertEqual(self.tracker("add", "Idea two").returncode, 0)
+        self.assertEqual(self.tracker("add", "Idea two", "--notes", "Done when: it works").returncode, 0)
         self.assertNotIn("--label", self.created()[-1])
 
     def test_40_issue_import_without_a_ready_label_is_refused(self):
@@ -905,6 +915,113 @@ class Unblock(Sandbox):
         self.assertEqual(r.returncode, 2)
         self.assertIn("gh issue edit 246 -R acme/app --remove-label agent:blocked --add-label agent:ready", r.stderr)
         self.assertNotIn("-X PUT", self.log("gh.log"))
+
+
+def iso_now(minutes=0):
+    return (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class TaskContext(Sandbox):
+    """2026-11-15 audit: builders started cold. A Part-of PR on a claimed row lost its Left, vague ad-hoc rows were built from a title,
+    and the claim printed one line, so each builder re-read the CSV (or guessed). Now: Part-of lands on active rows, a row needs
+    criteria to be ready, and claim/show print the task card."""
+    AC = HEADER + ["Acceptance criteria", "Tables"]
+
+    def prs(self, *prs):
+        writef(os.path.join(self.fake, "prs.json"), json.dumps(list(prs)))
+
+    def test_60_part_of_on_a_claimed_row_keeps_its_pr_and_left(self):
+        self.put([row("T-102", status="Claimed", Holder="laptop:runA:abc", Environment="laptop", Run="runA",
+                      Branch="feat/t102-thing", Updated=ago(1))])
+        self.prs({"number": 13, "headRefName": "feat/t102-thing", "mergedAt": iso_now(), "body": "Part of T-102\nLeft: wire up the webhook\n"})
+        r = self.tracker("sync")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "T-102 Claimed: #13 Part of merged, left: wire up the webhook")
+        got = self.rows()["T-102"]
+        self.assertEqual((got["Status"], got["Holder"], got["PR"], got["Next step"]), ("Claimed", "laptop:runA:abc", "#13", "wire up the webhook"))
+        self.assertEqual(self.tracker("sync").stdout.strip(), "nothing to sync")  # idempotent: no write every sync
+        self.assertEqual(self.log("gh.log").count("-X PUT"), 1)
+        # a beat after the merge is newer than the PR's Left: the next sync must not put the old text back
+        self.put([row("T-102", status="Building", Holder="laptop:runA:abc", Branch="feat/t102-thing", PR="#13",
+                      **{"Next step": "newer plan", "Updated": iso_now(2)[:16] + "Z"})])
+        self.assertEqual(self.tracker("sync").stdout.strip(), "nothing to sync")
+        self.assertEqual(self.rows()["T-102"]["Next step"], "newer plan")
+
+    def test_61_add_files_a_vague_task_as_blocked_with_the_reason(self):
+        self.put([row("T-101", **{"Acceptance criteria": "returns 200"})], header=self.AC)
+        r = self.tracker("add", "Idea")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "added T-102: Idea (Blocked, not built until answered: no acceptance criteria)")
+        got = self.rows()["T-102"]
+        self.assertEqual(got["Status"], "Blocked")
+        self.assertTrue(got["Blocker"].startswith("needs founder: no acceptance criteria; answer with tracker unblock T-102"), got["Blocker"])
+        r = self.tracker("add", "Specd", "--notes", "GET /x returns 404 for an unknown id")
+        self.assertEqual(r.stdout.splitlines()[0], "added T-103: Specd")
+        self.assertEqual(self.rows()["T-103"]["Status"], "Not started")
+        r = self.tracker("add", "Gated", "--notes", "Refund flow; needs the founder's ok on fees")
+        self.assertIn("waits on a decision", r.stdout.splitlines()[0])
+        self.assertEqual(self.rows()["T-104"]["Status"], "Blocked")
+        # his answer makes it ready: unblock --note writes it into the criteria
+        self.assertEqual(self.tracker("unblock", "T-104", "--note", "flat 2% fee").returncode, 0)
+        self.assertEqual(self.rows()["T-104"]["Status"], "Not started")
+        self.assertIn("NEW T-104 | Gated", self.tracker("next").stdout.splitlines())
+
+    def test_62_next_and_claim_hold_a_vague_row_as_not_ready(self):
+        self.put([row("T-101"), row("T-102", **{"Acceptance criteria": "needs the founder's ok\nAnswer 2026-11-01: yes, go"}),
+                  row("T-103", **{"Acceptance criteria": "Spec first: which plans get it"})], header=self.AC)
+        out = self.tracker("next").stdout.splitlines()
+        self.assertEqual(out[0], "NEXT NEW T-102")
+        self.assertIn("NOT READY T-101 | no acceptance criteria", out)
+        self.assertIn("NOT READY T-103 | waits on a decision ('Spec first')", out)
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("T-101 is not ready: no acceptance criteria", r.stderr)
+
+    def test_63_claim_prints_the_card_after_the_claimed_line_and_show_reprints_it(self):
+        self.put([row("T-100", status="Done"), row("T-101", **{"Acceptance criteria": "returns 200\nwrites an audit row", "Tables": "users",
+                                                                "Depends on": "T-100"})], header=self.AC)
+        self.prs({"number": 9, "headRefName": "feat/t101-first", "mergedAt": "2026-10-30T10:00:00Z", "body": "Part of T-101\nLeft: the webhook\n"})
+        self.assertEqual(self.tracker("sync").returncode, 0)
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = r.stdout.splitlines()
+        self.assertTrue(lines[0].startswith("CLAIMED T-101 branch feat/t101-thing claim 1111"), lines[0])
+        card = lines[1:]
+        self.assertEqual(card[0], "TASK CARD T-101 | Thing")
+        for want in ("Acceptance criteria:", "  returns 200", "  writes an audit row", "Tables: users", "Depends on: T-100",
+                     "Next step: the webhook", "Earlier PRs:", "  #9 Part of (merged 2026-10-30) from feat/t101-first: left: the webhook"):
+            self.assertIn(want, card)
+        self.assertFalse(any(re.search(r"\bbranch\s", l) for l in card), card)  # token-guard takes the first `branch <name>` of a prompt
+        puts = self.log("gh.log").count("-X PUT")
+        s = self.tracker("show", "T-101")
+        self.assertEqual(s.returncode, 0, s.stderr)
+        self.assertIn("TASK CARD T-101 | Thing", s.stdout)
+        self.assertIn("Branch: feat/t101-thing", s.stdout)
+        self.assertEqual(self.log("gh.log").count("-X PUT"), puts)  # read-only
+        d = json.loads(self.tracker("show", "T-101", "--json").stdout)
+        self.assertEqual(d["prs"][0]["left"], "the webhook")
+
+
+class IssueCard(IssueImport):
+    def test_64_issue_card_carries_body_and_last_comments(self):
+        self.put([row("#46", title="Fix login")])
+        self.issues(open=[(46, "Fix login", ["agent:ready"], "Login fails on Safari.\nDone when: the e2e login test passes")])
+        data = json.loads(readf(os.path.join(self.fake, "issues.json")))
+        data["acme/app"][0]["comments"] = [{"author": {"login": "pv"}, "body": "use the v2 auth endpoint"}]
+        writef(os.path.join(self.fake, "issues.json"), json.dumps(data))
+        r = self.tracker("show", "#46")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for want in ("TASK CARD #46 | Fix login", "Issue body:", "  Done when: the e2e login test passes", "Comments (last 1):", "  pv: use the v2 auth endpoint"):
+            self.assertIn(want, r.stdout.splitlines())
+
+    def test_65_unblock_note_in_issue_mode_is_an_issue_comment(self):
+        self.put([row("#47", status="Blocked", Blocker="needs founder: which plan?")])
+        r = self.tracker("unblock", "#47", "--note", "the pro  plan")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c = [json.loads(l) for l in self.log("comments.json").splitlines()]
+        self.assertEqual(c[0][:5], ["issue", "comment", "47", "-R", "acme/app"])
+        self.assertRegex(c[0][-1], r"^Answer \d{4}-\d\d-\d\d: the pro plan$")
+        self.assertEqual(self.rows()["#47"]["Status"], "Not started")
 
 
 if __name__ == "__main__":

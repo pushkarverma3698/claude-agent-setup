@@ -5,6 +5,7 @@
   tracker block T-NNN "<text>" --needs founder|stakeholder | done T-NNN --pr N | release T-NNN | check [T-NNN] | migrate
   tracker add "<title>" [--notes TXT] [--dry-run]   queue a new task (a new row, or a new GitHub issue when ISSUE_IMPORT=1)
   tracker unblock T-NNN [--note TXT]   his answer to a Blocked row: back in the queue (a leftover when it has a branch)
+  tracker show T-NNN [--json]   the task card: every filled column, Next step, earlier PRs (issue mode: the issue body and comments)
   every command takes --project NAME (or $TRACKER_PROJECT) or --conf PATH.
 
 Phone, laptop and VPS routine run the same commands; only this tool writes the CSV, through `gh api` (the contents API),
@@ -16,6 +17,9 @@ A row is HELD while it is active, has a holder and was updated less than LEASE_H
 no holder, is a LEFTOVER and must be taken (claim --resume) before any new task. Claiming also writes <git dir>/tracker-claim
 in the worktree, which `check` (push hooks) reads to stop a session whose row someone else took over.
 MAX_BUILDERS (default 3, 0 = no cap) stops a NEW claim while that many rows are held; leftovers are never capped.
+A Not started row is READY only when its criteria column (CRITERIA_COL, default `Acceptance criteria` when the file has it)
+is filled and does not wait on an unanswered decision; `add` files a vague task as Blocked and `next` holds one as NOT READY
+(2026-11-15 audit: 6 of 12 ad-hoc BH rows were built from a title alone and ended Blocked mid-build).
 Exit codes: 0 ok, 2 usage/config/API error, 3 held by someone else, 4 leftover first, 5 not the holder, 6 at builder cap.
 """
 import argparse, base64, csv, datetime as dt, io, json, math, os, random, re, secrets, shlex, shutil, socket, subprocess, sys, time
@@ -62,7 +66,7 @@ def repo_of_url(url):
 
 KEYS = ["TRACKER_REPO", "TRACKER_PATH", "TRACKER_BRANCH", "CODE_REPO", "REPO_DIR", "WORK_BASE", "WORKTREE_ROOT", "BRANCH_FMT",
         "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE",
-        "ISSUE_IMPORT", "ISSUE_REPO", "ISSUE_STATUS", "NOTES_COL", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
+        "ISSUE_IMPORT", "ISSUE_REPO", "ISSUE_STATUS", "NOTES_COL", "CRITERIA_COL", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
 
 
 def load_conf(args, project_hint=""):
@@ -279,6 +283,15 @@ class Table:
         m = c.get("BLOCK_COL") and c.get("BLOCK_RE") and re.search(c["BLOCK_RE"], self.get(rec, c["BLOCK_COL"]))
         return m.group(0) if m else ""
 
+    def criteria_col(self):
+        """The column a task's done-criteria live in, or None when the file has none (then readiness is not judged)."""
+        want = self.cfg.get("CRITERIA_COL") or "Acceptance criteria"
+        return want if self.index(want) >= 0 else None
+
+    def unready(self, rec):
+        col = self.criteria_col()
+        return unready_reason(self.get(rec, col)) if col else ""
+
     def state(self, rec):
         st = self.status(rec)
         if st == "Done":
@@ -291,13 +304,31 @@ class Table:
             # an empty holder with a branch is a claim whose row write crashed (see reconcile): held until the lease passes
             return "held" if young and (self.get(rec, "Holder") or self.get(rec, "Branch")) else "leftover"
         if st == "Not started":
-            return "notready" if self.deps_unmet(rec) or self.blocked_by(rec) else "new"
+            return "notready" if self.deps_unmet(rec) or self.blocked_by(rec) or self.unready(rec) else "new"
         return "other"
 
     def order(self, rec):
         nat = lambda s: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", s)]
         cols = [c.strip() for c in self.cfg["ORDER_COLS"].split(",") if c.strip()]
         return [nat(self.get(rec, c)) for c in cols] + [task_num(self.get(rec, self.cfg["ID_COL"]))]
+
+
+# a criteria text that waits on someone's decision; an `Answer <date>:` line written after it (tracker unblock --note) settles it
+GATE = re.compile(r"(?:needs?|waits? (?:on|for)) (?:the )?(?:founder|pushkar|his|stakeholder)\S*(?: (?:ok|okay|approval|decision|call|answer))?"
+                  r"|founder'?s? (?:ok|okay|approval|decision|call|answer)|if (?:he )?approves?d?\b|spec first|\bTBD\b"
+                  r"|decide (?:whether|if)|to be decided|open question", re.I)
+ANSWER = re.compile(r"^\s*Answer \d{4}-\d\d-\d\d:", re.M)
+
+
+def unready_reason(text):
+    """Why a task with these done-criteria must not be built yet, or "" when it can be."""
+    text = (text or "").strip()
+    if not text or text == "Added with `tracker add`.":
+        return "no acceptance criteria"
+    gates = list(GATE.finditer(text))
+    if gates and not ANSWER.search(text, gates[-1].end()):
+        return f"waits on a decision ({gates[-1].group(0)!r})"
+    return ""
 
 
 def task_num(task):
@@ -411,13 +442,7 @@ def apply_sync(t, prs):
     changes = []
     for pr in prs:
         n, at = pr["number"], parse_ts(pr.get("mergedAt") or "") or now()
-        closes, part, left = [], [], ""
-        for line in (pr.get("body") or "").splitlines():
-            m = re.match(r"^\s*(?:[-*+]\s+)?(?:\*\*|__)?\s*(closes|part of|left)\b[:\s*_]*(.*)$", line, re.I)
-            if m and m.group(1).lower() == "left":
-                left = m.group(2).strip(" *_") or left
-            elif m:
-                (closes if m.group(1).lower() == "closes" else part).extend(ids(t.cfg, m.group(2)))
+        closes, part, left = pr_refs(t.cfg, pr.get("body"))
         for task in closes:
             rec = t.find(task)
             if rec is not None and t.status(rec) != "Done":
@@ -425,12 +450,36 @@ def apply_sync(t, prs):
                 t.setmany(rec, Status="Done", PR=f"#{n}", Updated=stamp(at), **{"Next step": "", "Blocker": ""})
         for task in part:
             rec = t.find(task)
-            if rec is not None and t.status(rec) == "Not started":
+            st = t.status(rec) if rec is not None else ""
+            if st == "Not started":
                 changes.append(f"{task} Not started -> Building (#{n} Part of)")
                 t.setmany(rec, Status="Building", Holder="", PR=f"#{n}")
                 if left:
                     t.set(rec, "Next step", left)
+            elif st in ACTIVE:
+                # 2026-11-15: 36 of 123 BH PRs were Part-of on a claimed row and their PR and Left were dropped, so the next
+                # builder resumed with an empty Next step. A beat or claim stamped after the merge is newer and wins.
+                ts = parse_ts(t.get(rec, "Updated"))
+                if ts is not None and ts >= at.replace(second=0, microsecond=0) + dt.timedelta(minutes=1):
+                    continue
+                if t.get(rec, "PR") != f"#{n}" or (left and t.get(rec, "Next step") != left):
+                    changes.append(f"{task} {st}: #{n} Part of merged" + (f", left: {left}" if left else ""))
+                t.set(rec, "PR", f"#{n}")
+                if left:
+                    t.set(rec, "Next step", left)
     return changes
+
+
+def pr_refs(cfg, body):
+    """(closes ids, part-of ids, Left text) of a PR body."""
+    closes, part, left = [], [], ""
+    for line in (body or "").splitlines():
+        m = re.match(r"^\s*(?:[-*+]\s+)?(?:\*\*|__)?\s*(closes|part of|left)\b[:\s*_]*(.*)$", line, re.I)
+        if m and m.group(1).lower() == "left":
+            left = m.group(2).strip(" *_") or left
+        elif m:
+            (closes if m.group(1).lower() == "closes" else part).extend(ids(cfg, m.group(2)))
+    return closes, part, left
 
 
 def branch_re(cfg, task):
@@ -563,8 +612,13 @@ def describe(t, kind, rec):
         d["lease_ends"], d["age"] = stamp(ts + t.cfg["lease"]), ago(ts)
         d["holder"] = d["holder"] or "unknown"
     elif kind == "notready":
-        d["reason"] = f"deps not done: {', '.join(un)}" if un else f"blocked by {t.blocked_by(rec)}"
+        d["reason"] = notready_reason(t, rec)
     return d
+
+
+def notready_reason(t, rec):
+    un = t.deps_unmet(rec)
+    return f"deps not done: {', '.join(un)}" if un else f"blocked by {t.blocked_by(rec)}" if t.blocked_by(rec) else t.unready(rec)
 
 
 def at_cap(t, cfg):
@@ -654,8 +708,7 @@ def cmd_claim(cfg, a):
         ts = parse_ts(g("Updated"))
         raise Fail(3, f"{task} is held by {g('Holder') or 'unknown'} (env {g('Environment') or '?'}, run {g('Run') or '?'}) until {stamp(ts + cfg['lease'])}")
     if st == "notready":
-        un = t.deps_unmet(rec)
-        raise Fail(2, f"{task} is not ready: " + (f"deps not done: {', '.join(un)}" if un else f"blocked by {t.blocked_by(rec)}"))
+        raise Fail(2, f"{task} is not ready: {notready_reason(t, rec)}")
     leftovers = [t.get(r, idc) for r in t.rows() if t.state(r) == "leftover"]
     if st == "new" and leftovers:
         raise Fail(4, f"leftover first: {', '.join(leftovers)}")
@@ -735,6 +788,72 @@ def cmd_claim(cfg, a):
     with open(os.path.join(gd, "tracker-claim"), "w") as fh:
         json.dump({"project": cfg["PROJECT"], "conf": cfg["CONF"], "task": task, "holder": holder, "branch": branch, "claim": sha, "claimed_at": stamp()}, fh)
     print(f"CLAIMED {task} branch {branch} claim {sha} worktree={wt} holder={holder}")
+    try:  # the claim is written: a card that cannot be built must not fail it, the builder runs `tracker show` again
+        print("\n".join(card_lines(cfg, fetch(cfg)[1], task)))
+    except Fail as e:  # allow-failopen: the card is a convenience printed after the claim; `tracker show` retries it
+        log(f"task card not printed ({e}): run `tracker show {task}`")
+
+
+CARD_CAP = 3000  # characters per column value, issue body or comment: a card is read by a builder, not archived
+
+
+def card_value(name, val, cap=CARD_CAP):
+    val = val.strip()
+    if len(val) > cap:
+        val = val[:cap].rstrip() + f" ... ({len(val) - cap} more characters)"
+    lines = val.splitlines()
+    return [f"{name}: {lines[0]}"] if len(lines) == 1 else [f"{name}:"] + [f"  {x}" for x in lines]
+
+
+def issue_view(cfg, task):
+    out = gh_out("issue", "view", task.lstrip("#"), "-R", cfg["ISSUE_REPO"], "--json", "title,body,comments")
+    return json.loads(out or "{}")
+
+
+def card(cfg, t, task):
+    """Everything a builder needs to start on `task` without asking: the row's filled columns, where the work stands, the merged PRs
+    that named it and, in issue mode, the issue body and its last comments (his answers land there)."""
+    rec = need_row(t, task)
+    skip = {cfg["ID_COL"], cfg["TITLE_COL"], cfg["STATUS_COL"]} | {cfg["cols"][a] for a in AGENT_COLS}
+    d = {"task": task, "title": t.get(rec, cfg["TITLE_COL"]), "status": t.status(rec), "ready": "",
+         "columns": [(h, t.get(rec, h)) for h in t.head.cells if h not in skip and t.get(rec, h)],
+         "work": [(a, t.get(rec, a)) for a in ("Branch", "PR", "Next step", "Blocker") if t.get(rec, a)], "prs": [], "issue": None}
+    if d["status"] == "Not started":
+        d["ready"] = notready_reason(t, rec) or "ready"
+    for pr in merged_prs(cfg):
+        closes, part, left = pr_refs(cfg, pr.get("body"))
+        hit = [k for k, ids_ in (("Closes", closes), ("Part of", part)) if task in ids_]
+        if hit:
+            d["prs"].append({"number": pr["number"], "kind": hit[0], "merged": (pr.get("mergedAt") or "")[:10],
+                             "head": pr.get("headRefName", ""), "left": left})
+    if cfg.get("ISSUE_IMPORT") == "1":
+        i = issue_view(cfg, task)
+        d["issue"] = {"body": i.get("body") or "", "comments": [{"author": (c.get("author") or {}).get("login", "?"), "body": c.get("body") or ""}
+                                                                for c in (i.get("comments") or [])[-5:]]}
+    return d
+
+
+def card_lines(cfg, t, task, d=None):
+    d = d or card(cfg, t, task)
+    out = [f"TASK CARD {d['task']} | {d['title']}", f"Status: {d['status']}" + (f" ({d['ready']})" if d["ready"] else "")]
+    for name, val in d["columns"] + d["work"]:
+        out += card_value(name, val)
+    if d["issue"] is not None:
+        out += card_value("Issue body", d["issue"]["body"] or "(empty)", 2 * CARD_CAP)
+        if d["issue"]["comments"]:
+            out.append(f"Comments (last {len(d['issue']['comments'])}):")
+            for c in d["issue"]["comments"]:
+                out += ["  " + x for x in card_value(c["author"], c["body"])]
+    if d["prs"]:  # "from <head>", never "branch <name>": token-guard reads the first `branch <name>` of a builder prompt
+        out.append("Earlier PRs:")
+        out += [f"  #{p['number']} {p['kind']} (merged {p['merged']}) from {p['head']}" + (f": left: {p['left']}" if p["left"] else "") for p in d["prs"]]
+    return out
+
+
+def cmd_show(cfg, a):
+    t = fetch(cfg)[1]
+    d = card(cfg, t, a.task)
+    print(json.dumps(d, indent=1) if a.json else "\n".join(card_lines(cfg, t, a.task, d)))
 
 
 def holder_cmd(cfg, a, label, edit, allow_unheld=False, touch=True):
@@ -870,6 +989,9 @@ def add_row(t, title, notes):
     t.set(rec, "Status", "Not started")
     if notes:
         t.set(rec, ncol, notes)
+    why = t.unready(rec)
+    if why:  # filed, so the idea is not lost, but as a question for him instead of a build
+        t.setmany(rec, Status="Blocked", Blocker=f"needs founder: {why}; answer with tracker unblock {tid} --note '<what done looks like>'")
     if cfg.get("ROW_FILTER"):
         col, _, val = cfg["ROW_FILTER"].partition("=")
         t.set(rec, col.strip(), val.strip())
@@ -877,6 +999,10 @@ def add_row(t, title, notes):
         if last is not None and col and t.index(col) >= 0 and not t.get(rec, col):
             t.set(rec, col, t.get(last, col))
     return tid, rec
+
+
+def added_note(t, rec):
+    return f" (Blocked, not built until answered: {t.unready(rec)})" if t.status(rec) == "Blocked" else ""
 
 
 def tracker_url(cfg):
@@ -890,6 +1016,11 @@ def add_issue(cfg, a, title, notes):
         raise Fail(2, "ISSUE_STATUS maps no label to Not started, so a new issue would never become ready work")
     label = "agent:ready" if "agent:ready" in labels else labels[0]
     repo, body = cfg["ISSUE_REPO"], notes or "Added with `tracker add`."
+    why = unready_reason(notes)
+    held = [k for k, v in cfg["issue_status"] if v == "Blocked" and k != "*"]
+    if why and held:  # the same rule as a CSV row: a vague issue waits for his answer instead of reaching a builder
+        label = "agent:blocked" if "agent:blocked" in held else held[0]
+        body += f"\n\nNot ready: {why}. Add what done looks like, then relabel it {labels[0]}."
     cmd = ["issue", "create", "-R", repo, "--title", title, "--body", body] + (["--label", label] if label != "*" else [])
     if a.dry_run:
         print(f"dry run: would create an issue in {repo}" + (f" labelled {label}" if label != "*" else "") + f": {title}")
@@ -900,7 +1031,7 @@ def add_issue(cfg, a, title, notes):
     m = re.search(r"/issues/(\d+)$", url)
     if not m:
         raise Fail(2, f"gh issue create printed no issue url: {out[:200]!r}")
-    print(f"added #{m.group(1)}: {title}\n{url}")
+    print(f"added #{m.group(1)}: {title}" + (f" (labelled {label}, not built until answered: {why})" if why and held else "") + f"\n{url}")
     log("it becomes a tracker row at the next `tracker sync`")
 
 
@@ -913,18 +1044,27 @@ def cmd_add(cfg, a):
     if a.dry_run:  # the same row, built on the current file, not written
         t = fetch(cfg)[1]
         tid, rec = add_row(t, title, notes)
-        print(f"dry run: would add {tid}: {title}")
+        print(f"dry run: would add {tid}: {title}" + added_note(t, rec))
         print("row: " + "; ".join(f"{h}={c}" for h, c in zip(t.head.cells, rec.cells) if c))
         print(tracker_url(cfg))
         return
-    tid, _ = mutate(cfg, f"tracker: add {title[:50]!r} ({identity(cfg)[2]})", lambda t: (True, add_row(t, title, notes)[0]))
-    print(f"added {tid}: {title}\n{tracker_url(cfg)}")
+    def fn(t):
+        tid, rec = add_row(t, title, notes)
+        return True, (tid, added_note(t, rec))
+    tid, extra = mutate(cfg, f"tracker: add {title[:50]!r} ({identity(cfg)[2]})", fn)[0]
+    print(f"added {tid}: {title}{extra}\n{tracker_url(cfg)}")
 
 
 def cmd_unblock(cfg, a):
     """His answer to a Blocked row, or a block that no longer holds: back in the queue, whoever held it. A row with a branch becomes a
     leftover, so `next` hands that branch to the next builder first; one without goes back to Not started. --note is kept in the notes column."""
     note = " ".join((a.note or "").split())
+    issue = cfg.get("ISSUE_IMPORT") == "1"
+    if note and issue:  # issue mode has no notes column: the answer goes on the issue, where `tracker show` reads it back
+        t0 = fetch(cfg)[1]
+        r0 = need_row(t0, a.task)
+        if t0.status(r0) == "Blocked" and not t0.get(r0, "Blocker").startswith("issue label "):
+            gh_out("issue", "comment", a.task.lstrip("#"), "-R", cfg["ISSUE_REPO"], "--body", f"Answer {stamp()[:10]}: {note}")
 
     def fn(t):
         rec = need_row(t, a.task)
@@ -934,7 +1074,7 @@ def cmd_unblock(cfg, a):
         if cfg.get("ISSUE_IMPORT") == "1" and was.startswith("issue label "):  # the label is the truth: the next sync would re-block the row
             raise Fail(2, f"{a.task} is blocked by its issue label: gh issue edit {a.task.lstrip('#')} -R {cfg['ISSUE_REPO']} "
                           f"--remove-label {was[len('issue label '):]} --add-label agent:ready, then tracker sync")
-        if note:
+        if note and not issue:
             col = notes_col(t, note, "or drop --note")
             old = t.get(rec, col)
             t.set(rec, col, (old + "\n" if old else "") + f"Answer {stamp()[:10]}: {note}")
@@ -987,6 +1127,8 @@ def main(argv=None):
     add("check").add_argument("task", nargs="?")
     n = add("add")
     n.add_argument("title"), n.add_argument("--notes"), n.add_argument("--dry-run", action="store_true")
+    w = add("show")
+    w.add_argument("task"), w.add_argument("--json", action="store_true")
     u = add("unblock")
     u.add_argument("task"), u.add_argument("--note")
     try:
