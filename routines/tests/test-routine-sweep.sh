@@ -88,20 +88,13 @@ echo '[{"id":"11111111","kind":"background","name":"routine: proj x","state":"wo
 sweep
 [ ! -e "$FAKE/notify" ] && ok "working, done, old and other-routine runs are not reported" || bad "false dead: $(cat "$FAKE/notify")"
 
-# 6. Blocked row: notified once per day with project, task, environment, run; not when tracker block sent it today
-fresh h; blocked_json "2026-01-01T00:00Z" >"$FAKE/next.json"; sweep; sweep
-[ "$(lines notify 'STILL BLOCKED proj T-9')" = 1 ] && grep -q 'environment: vps' "$FAKE/notify" && grep -q 'run: abc123' "$FAKE/notify" && grep -q 'approve the invoice' "$FAKE/notify" \
-  && ok "blocked row: one full notify per day" || bad "blocked: $(cat "$FAKE/notify" 2>/dev/null)"
-rm -r -- "$FAKE/state"; sweep   # next day = marker gone
-[ "$(lines notify 'STILL BLOCKED proj T-9')" = 2 ] && ok "blocked row: repeats on a new day" || bad "no repeat"
-fresh i; blocked_json "$(date -u +%Y-%m-%dT%H:%MZ)" >"$FAKE/next.json"; sweep
-[ ! -e "$FAKE/notify" ] && ok "blocked a minute ago: tracker block already sent it" || bad "duplicate first message"
+# 6. Blocked row: the sweep sends nothing (tracker block sent the first notice; routine-verdict lists it daily under "Needs you")
+fresh h; blocked_json "2026-01-01T00:00Z" >"$FAKE/next.json"; sweep
+[ "$RC" = 0 ] && [ ! -e "$FAKE/notify" ] && ok "blocked row: the sweep sends nothing" || bad "blocked: rc=$RC notify=$(cat "$FAKE/notify" 2>/dev/null)"
 
 # 7. --dry-run: prints the decisions, starts nothing, sends nothing, writes no marker
 fresh j; echo "$LEFT" >"$FAKE/next.json"; dead_agent >"$FAKE/agents.json"; sweep --dry-run
 [ "$RC" = 0 ] && [ ! -e "$FAKE/started" ] && [ ! -e "$FAKE/notify" ] && [ ! -e "$FAKE/state" ] && grep -q 'would start proj' "$FAKE/out" && grep -q 'would notify' "$FAKE/out" \
   && ok "--dry-run: decisions printed, no side effects" || bad "dry-run: rc=$RC out=$(cat "$FAKE/out")"
-fresh k; blocked_json "2026-01-01T00:00Z" >"$FAKE/next.json"; sweep --dry-run
-[ ! -e "$FAKE/notify" ] && grep -q 'would notify' "$FAKE/out" && ok "--dry-run: blocked row only printed" || bad "dry-run blocked: $(cat "$FAKE/out")"
 
 [ "$fails" = 0 ] && { echo "all passed"; exit 0; } || { echo "$fails failed"; exit 1; }

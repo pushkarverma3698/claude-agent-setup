@@ -3,6 +3,8 @@
 
   tracker sync | next [--json] | claim T-NNN [--slug s] [--worktree P] | beat T-NNN [--status S] [--pr N] [--next TXT]
   tracker block T-NNN "<text>" --needs founder|stakeholder | done T-NNN --pr N | release T-NNN | check [T-NNN] | migrate
+  tracker add "<title>" [--notes TXT] [--dry-run]   queue a new task (a new row, or a new GitHub issue when ISSUE_IMPORT=1)
+  tracker unblock T-NNN [--note TXT]   his answer to a Blocked row: back in the queue (a leftover when it has a branch)
   every command takes --project NAME (or $TRACKER_PROJECT) or --conf PATH.
 
 Phone, laptop and VPS routine run the same commands; only this tool writes the CSV, through `gh api` (the contents API),
@@ -60,7 +62,7 @@ def repo_of_url(url):
 
 KEYS = ["TRACKER_REPO", "TRACKER_PATH", "TRACKER_BRANCH", "CODE_REPO", "REPO_DIR", "WORK_BASE", "WORKTREE_ROOT", "BRANCH_FMT",
         "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE",
-        "ISSUE_IMPORT", "ISSUE_REPO", "ISSUE_STATUS", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
+        "ISSUE_IMPORT", "ISSUE_REPO", "ISSUE_STATUS", "NOTES_COL", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
 
 
 def load_conf(args, project_hint=""):
@@ -488,6 +490,15 @@ def issue_blockers(cfg, body, states):
     return same, other
 
 
+def new_rec(t):
+    """Append an empty record to t (the last record gets a line end first if the file had none)."""
+    if t.recs[-1].raw and not re.search(r"[\r\n]$", t.recs[-1].raw):
+        t.recs[-1].raw += t.eol
+    rec = Rec([""] * len(t.head.cells), t.eol)
+    t.recs.append(rec)
+    return rec
+
+
 def apply_issue_import(t, open_issues, states):
     """GitHub issues are the truth: add rows for new open issues, Done for closed ones, keep only open blockers in the dep columns."""
     cfg, changes, idc = t.cfg, [], t.cfg["ID_COL"]
@@ -505,10 +516,7 @@ def apply_issue_import(t, open_issues, states):
         if rec is None:
             if want is None:
                 continue
-            if t.recs[-1].raw and not re.search(r"[\r\n]$", t.recs[-1].raw):
-                t.recs[-1].raw += t.eol
-            rec = Rec([""] * len(t.head.cells), t.eol)
-            t.recs.append(rec)
+            rec = new_rec(t)
             for col, val in ((idc, task), (cfg["TITLE_COL"], i["title"]), ("Status", want)):
                 t.set(rec, col, val)
             if want == "Blocked":
@@ -619,6 +627,20 @@ def claim_branch_bin():
     raise Fail(2, "claim-branch not found (set TRACKER_CLAIM_BRANCH)")
 
 
+def restore_wip(wt):
+    """A leftover's dead run on another machine pushed its unpushed work to refs/wip/<branch> (wip-save Stop hook,
+    2026-11-06): lay it into the fresh worktree so the new holder starts from it, not from the claim commit."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    path = next((p for p in (os.environ.get("WIP_SAVE", ""), "/opt/agent-rules/hooks/wip-save.py",
+                             os.path.expanduser("~/.claude/hooks/wip-save.py"),
+                             os.path.join(here, "..", "..", "claude-remote-hooks", "wip-save.py")) if p and os.path.isfile(p)), "")
+    if not path:
+        log("wip-save.py not installed: a WIP snapshot of this branch, if any, was not restored")
+        return
+    r = subprocess.run([sys.executable, path, "--restore"], cwd=wt, capture_output=True, text=True)
+    log((r.stdout + r.stderr).strip() + ("" if r.returncode == 0 else f" (wip-save exit {r.returncode}: restore it by hand)"))
+
+
 def cmd_claim(cfg, a):
     task, idc = a.task, cfg["ID_COL"]
     t = fetch(cfg)[1]
@@ -654,7 +676,12 @@ def cmd_claim(cfg, a):
         # the row lease decides who may take a leftover: claim-branch's own CLAIM_HOURS (12) must not outlive LEASE_HOURS (6),
         # or `next` offers a leftover that `claim` then refuses. LIVE_HOURS stays: a recent real push means someone is live.
         hours = str(math.ceil(cfg["lease"].total_seconds() / 3600))
-        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, env={**os.environ, "CLAIM_HOURS": hours})
+        # run from the dead run's worktree, which claim then adopts: worktree-holds --exclude "$PWD" must not count that
+        # worktree's unsaved files as another holder (2026-11-06: T-137/142/143 refused for 72h). The expired lease proves it is free.
+        old = worktree_of(cfg["REPO_DIR"], branch)
+        here = old if old and (not a.worktree or os.path.abspath(a.worktree) == old) else None
+        r = subprocess.run([cb, "--resume", repo, branch], capture_output=True, text=True, cwd=here,
+                           env={**os.environ, "CLAIM_HOURS": hours})
     else:
         branch = base = cfg["BRANCH_FMT"].format(num=task_num(task), slug=a.slug or slugify(g(cfg["TITLE_COL"])))
         # a kept branch of an earlier merged PR (or any live one) owns the plain name: claim-branch would refuse it as held
@@ -682,6 +709,12 @@ def cmd_claim(cfg, a):
         w = gitc("worktree", "add", "--track", "-B", branch, wt, f"origin/{branch}")
         if w.returncode:
             raise Fail(2, f"git worktree add failed: {w.stderr.strip()}")
+        if st == "leftover":
+            restore_wip(wt)
+    else:   # adopted: bring it up to the claim commit (empty, so uncommitted files never conflict)
+        m = gitc("merge", "-q", "--no-edit", f"origin/{branch}", cwd=wt)
+        if m.returncode:
+            raise Fail(2, f"git merge origin/{branch} in {wt} failed: {(m.stderr or m.stdout).strip()}")
     env, run, holder = identity(cfg)
 
     def fn(t2):
@@ -791,6 +824,130 @@ def cmd_release(cfg, a):
     print(f"released {a.task}" + (": branch kept (it carries work), row is a leftover" if kept else ""))
 
 
+NOTES_COLS = ["Notes", "Description", "Details", "Acceptance criteria"]  # tried in this order when the conf sets no NOTES_COL
+
+
+def next_id(t):
+    """The next free task id in the file's own format: same prefix, one above the highest number, zero-padded like the padded ones."""
+    cfg, found = t.cfg, []
+    for r in t.id_rows():  # every id in the file, not just ROW_FILTER's: the numbers are shared
+        tid = t.get(r, cfg["ID_COL"])
+        m = re.search(r"\d+$", tid)
+        if m:
+            found.append((int(m.group()), tid, m))
+    if found:
+        top, tid, m = max(found, key=lambda x: x[0])
+        width = max((len(x[2].group()) for x in found if x[2].group().startswith("0")), default=0)
+        new = tid[:m.start()] + str(top + 1).zfill(width)
+    else:  # empty tracker: T-\d+ -> T-1
+        new = re.sub(r"\\(.)", r"\1", re.sub(r"\\d\+", "1", cfg["ID_RE"]))
+    if not re.fullmatch(cfg["ID_RE"], new):
+        raise Fail(2, f"cannot work out a new id for ID_RE {cfg['ID_RE']!r} (made {new!r})")
+    return new
+
+
+def notes_col(t, text, hint):
+    """The column free text goes in: the conf's NOTES_COL, else the first of NOTES_COLS the file has. None when there is no text."""
+    want = [t.cfg["NOTES_COL"]] if t.cfg.get("NOTES_COL") else NOTES_COLS
+    col = next((c for c in want if t.index(c) >= 0), None)
+    if text and not col:
+        raise Fail(2, f"the tracker has no notes column ({', '.join(want)}): set NOTES_COL in the conf, {hint}")
+    return col
+
+
+def add_row(t, title, notes):
+    """Append a Not started row to t: the next id, the title, the notes, the ROW_FILTER value (or `next` would ignore it), and the
+    ORDER_COLS values of the row that sorts last, so the new task is picked after the planned work, not before it."""
+    cfg = t.cfg
+    if t.index(cfg["TITLE_COL"]) < 0:
+        raise Fail(2, f"tracker CSV has no '{cfg['TITLE_COL']}' column")
+    ncol = notes_col(t, notes, "or put the text in the title")
+    last = max(t.rows(), key=t.order, default=None)
+    tid = next_id(t)
+    rec = new_rec(t)
+    t.set(rec, cfg["ID_COL"], tid)
+    t.set(rec, cfg["TITLE_COL"], title)
+    t.set(rec, "Status", "Not started")
+    if notes:
+        t.set(rec, ncol, notes)
+    if cfg.get("ROW_FILTER"):
+        col, _, val = cfg["ROW_FILTER"].partition("=")
+        t.set(rec, col.strip(), val.strip())
+    for col in (c.strip() for c in cfg["ORDER_COLS"].split(",")):
+        if last is not None and col and t.index(col) >= 0 and not t.get(rec, col):
+            t.set(rec, col, t.get(last, col))
+    return tid, rec
+
+
+def tracker_url(cfg):
+    return f"https://github.com/{cfg['TRACKER_REPO']}/blob/{cfg['TRACKER_BRANCH']}/{urllib.parse.quote(cfg['TRACKER_PATH'])}"
+
+
+def add_issue(cfg, a, title, notes):
+    """ISSUE_IMPORT=1: the queue is the issues of ISSUE_REPO. Open one with the label that imports as Not started; the next sync mirrors it."""
+    labels = [k for k, v in cfg["issue_status"] if v == "Not started"]
+    if not labels:
+        raise Fail(2, "ISSUE_STATUS maps no label to Not started, so a new issue would never become ready work")
+    label = "agent:ready" if "agent:ready" in labels else labels[0]
+    repo, body = cfg["ISSUE_REPO"], notes or "Added with `tracker add`."
+    cmd = ["issue", "create", "-R", repo, "--title", title, "--body", body] + (["--label", label] if label != "*" else [])
+    if a.dry_run:
+        print(f"dry run: would create an issue in {repo}" + (f" labelled {label}" if label != "*" else "") + f": {title}")
+        print(f"body: {body}")
+        return
+    out = gh_out(*cmd).strip()
+    url = out.splitlines()[-1] if out else ""
+    m = re.search(r"/issues/(\d+)$", url)
+    if not m:
+        raise Fail(2, f"gh issue create printed no issue url: {out[:200]!r}")
+    print(f"added #{m.group(1)}: {title}\n{url}")
+    log("it becomes a tracker row at the next `tracker sync`")
+
+
+def cmd_add(cfg, a):
+    title, notes = " ".join(a.title.split()), (a.notes or "").strip()
+    if not title:
+        raise Fail(2, "tracker add needs a title")
+    if cfg.get("ISSUE_IMPORT") == "1":
+        return add_issue(cfg, a, title, notes)
+    if a.dry_run:  # the same row, built on the current file, not written
+        t = fetch(cfg)[1]
+        tid, rec = add_row(t, title, notes)
+        print(f"dry run: would add {tid}: {title}")
+        print("row: " + "; ".join(f"{h}={c}" for h, c in zip(t.head.cells, rec.cells) if c))
+        print(tracker_url(cfg))
+        return
+    tid, _ = mutate(cfg, f"tracker: add {title[:50]!r} ({identity(cfg)[2]})", lambda t: (True, add_row(t, title, notes)[0]))
+    print(f"added {tid}: {title}\n{tracker_url(cfg)}")
+
+
+def cmd_unblock(cfg, a):
+    """His answer to a Blocked row, or a block that no longer holds: back in the queue, whoever held it. A row with a branch becomes a
+    leftover, so `next` hands that branch to the next builder first; one without goes back to Not started. --note is kept in the notes column."""
+    note = " ".join((a.note or "").split())
+
+    def fn(t):
+        rec = need_row(t, a.task)
+        st, was = t.status(rec), t.get(rec, "Blocker")
+        if st != "Blocked":
+            raise Fail(2, f"{a.task} is {st or 'empty'}, not Blocked")
+        if cfg.get("ISSUE_IMPORT") == "1" and was.startswith("issue label "):  # the label is the truth: the next sync would re-block the row
+            raise Fail(2, f"{a.task} is blocked by its issue label: gh issue edit {a.task.lstrip('#')} -R {cfg['ISSUE_REPO']} "
+                          f"--remove-label {was[len('issue label '):]} --add-label agent:ready, then tracker sync")
+        if note:
+            col = notes_col(t, note, "or drop --note")
+            old = t.get(rec, col)
+            t.set(rec, col, (old + "\n" if old else "") + f"Answer {stamp()[:10]}: {note}")
+        if t.get(rec, "Branch"):
+            t.setmany(rec, Status="Building", Holder="", Environment="", Run="", Blocker="", Updated="")
+        else:
+            t.setmany(rec, Status="Not started", **{k.replace(" ", "_"): "" for k in AGENT_COLS})
+        return True, (t.state(rec), t.get(rec, "Branch"))
+    state, branch = mutate(cfg, f"tracker: unblock {a.task} ({identity(cfg)[2]})", fn)[0]
+    print(f"unblocked {a.task}: " + {"leftover": f"leftover, `next` resumes {branch} first", "new": "Not started, ready for the next build"}
+          .get(state, "Not started, still waiting on its dependencies"))
+
+
 def cmd_check(args):
     gd = git_dir(os.getcwd())
     claim = gd and read_claim(gd)
@@ -828,6 +985,10 @@ def main(argv=None):
     d.add_argument("task"), d.add_argument("--pr", required=True)
     add("release").add_argument("task")
     add("check").add_argument("task", nargs="?")
+    n = add("add")
+    n.add_argument("title"), n.add_argument("--notes"), n.add_argument("--dry-run", action="store_true")
+    u = add("unblock")
+    u.add_argument("task"), u.add_argument("--note")
     try:
         args = p.parse_args(argv)
         if args.cmd == "check":

@@ -150,7 +150,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm run verify\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm run verify\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -161,7 +161,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm ci\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -172,7 +172,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm install --frozen-lockfile\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm install --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -183,7 +183,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm test\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm test\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -194,7 +194,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npx tsc --noEmit\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpx tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -205,7 +205,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm -C packages/app install\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm -C packages/app install\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -216,7 +216,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm --prefix web ci\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm --prefix web ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -227,7 +227,7 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm --filter api i --frozen-lockfile\"}}",
- "stdout": ""
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm --filter api i --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
 }
 {
  "args": [],
@@ -2747,6 +2747,588 @@
  "rc": 0,
  "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"task acme/widgets#9, new\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 60s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 60\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 300s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5m\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 80s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 40; curl x; sleep 40\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 -R a/b --watch > /tmp/x 2>&1\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh run watch 99 --exit-status\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a sleep loop around gh polls CI in the foreground. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"until gh pr checks 3; do sleep 20; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast > /tmp/x 2>&1\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600 && curl x &\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5 && curl x\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"for f in a b; do sleep 2; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m \\\"stop using gh run watch and sleep 600\\\"\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > a.md <<EOF\\ngh run watch 1\\nsleep 900\\nEOF\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 60s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 60\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 300s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5m\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a foreground sleep of 80s holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 40; curl x; sleep 40\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 -R a/b --watch > /tmp/x 2>&1\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: watching CI in the foreground holds the session. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh run watch 99 --exit-status\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: a sleep loop around gh polls CI in the foreground. Run it with the Bash tool's run_in_background: true, which wakes this session when it exits, e.g. `gh pr checks <n> --watch --fail-fast > /tmp/checks-<n>.log 2>&1`. Meanwhile do other work or end the turn.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"until gh pr checks 3; do sleep 20; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12 --watch --fail-fast > /tmp/x 2>&1\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600\",\"run_in_background\":true}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 600 && curl x &\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 5 && curl x\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"for f in a b; do sleep 2; done\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr checks 12\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m \\\"stop using gh run watch and sleep 600\\\"\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [
+  "--pr-only"
+ ],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > a.md <<EOF\\ngh run watch 1\\nsleep 900\\nEOF\",\"run_in_background\":false}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm run verify\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm run verify\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm ci --no-audit\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm ci --no-audit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd x && pnpm install --frozen-lockfile\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ncd x && pnpm install --frozen-lockfile\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npx tsc --noEmit\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpx tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm -C packages/app install\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm -C packages/app install\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm --prefix web ci\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm --prefix web ci\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"REDIS_URL=redis://x/3 npm test\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nREDIS_URL=redis://x/3 npm test\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"timeout 600 npx vitest run a.test.ts\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ntimeout 600 npx vitest run a.test.ts\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"node_modules/.bin/eslint src\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnode_modules/.bin/eslint src\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"docker build -t x .\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\ndocker build -t x .\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm exec eslint .\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec eslint .\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"npm exec -- tsc --noEmit\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\nnpm exec -- tsc --noEmit\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"pnpm exec vitest run\"}}",
+ "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"command\": \"[ -r /usr/local/bin/heavy-slot ] && . /usr/local/bin/heavy-slot\\npnpm exec vitest run\"}, \"permissionDecisionReason\": \"token-guard: heavy check waits for the heavy-check slot\"}}\n"
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"grep -n vitest package.json\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git commit -m \\\"npm test now passes\\\"\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "FAKE_TRACKER_LOG": "<T>/tracker.calls",
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"ls node_modules/.bin/tsc\"}}",
  "stdout": ""
 }
 {

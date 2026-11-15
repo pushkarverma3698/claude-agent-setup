@@ -230,6 +230,13 @@ Usage:
 
 Address, CSRF token, and projectId are rediscovered on every call.
 Use --wait on `new` and `send` to block until the turn settles and print the close-out report.
+
+One agent per issue: `agy new` is refused while agy-guard reports another conversation writing, or when the brief
+names #N and origin already has task/issue-N. AGY_ALLOW_PARALLEL=1 overrides. PRs go to beta, never production;
+nothing merges or approves — the brief must say so.
+
+Review discipline: agy cannot grade Antigravity's own output. Close every delegated task by reading `git diff` and
+running the brief's verify command yourself; never take Antigravity's summary as done.
 EOF
 }
 
@@ -251,6 +258,9 @@ shift
 
 case "$sub" in
   new)
+    # One agent per issue, in code (2026-10-11: issues #115/#117/#119 were one bug worked three times). Refused while another
+    # Antigravity conversation is writing (agy-guard), or when the brief names an issue that already has a task/issue-N
+    # branch on origin. AGY_ALLOW_PARALLEL=1 overrides both, on purpose.
     do_wait=0
     wait_timeout=1800
     wait_settle=3

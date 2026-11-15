@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 HOLD_HOURS = 72   # unpushed work in a worktree holds its task; an abandoned worktree stops holding after this
 FEAT_RE = r"^(?:origin/)?feat/t\d"
@@ -120,6 +121,22 @@ def pr_heads_for(path):
     return r.stdout.split() if r.returncode == 0 else None
 
 
+def on_github(path):
+    """True when origin serves HEAD's commit (PR refs keep it after a squash-merge deletes the branch). Fetched into an
+    empty repo: in the worktree itself git skips the network for a commit it already has and exits 0 (2026-11-06)."""
+    sha = (git(path, "rev-parse", "HEAD") or "").strip()
+    url = (git(path, "remote", "get-url", "origin") or "").strip()
+    if not sha or not url:
+        return False
+    with tempfile.TemporaryDirectory() as s:
+        try:
+            subprocess.run(["git", "init", "-q", "--bare", s], check=True, capture_output=True)
+            return subprocess.run(["git", "-C", s, "fetch", "-q", "--depth=1", "--filter=tree:0", url, sha],
+                                  capture_output=True, timeout=40).returncode == 0
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return False
+
+
 def clean(path):
     """Reasons the worktree holds work that exists only on this disk ([] = safe to remove)."""
     st = worktree_state(path)
@@ -130,6 +147,8 @@ def clean(path):
         if heads is None:
             return ["could not ask GitHub (gh failed) whether its commits are in a PR"]
         st = worktree_state(path, heads)
+    if st[1] and on_github(path):   # detached or branch deleted after merge: GitHub may still hold HEAD
+        st = (st[0], 0, st[2])
     dirty, ahead, _ = st
     return [f"{ahead} commit(s) not on GitHub, {dirty} uncommitted file(s)"] if dirty or ahead else []
 

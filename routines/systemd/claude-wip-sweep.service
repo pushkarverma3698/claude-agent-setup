@@ -1,0 +1,10 @@
+[Unit]
+Description=Snapshot unpushed work in every ~claude-agent/work worktree to refs/wip/ (covers sessions killed with no hook)
+
+[Service]
+Type=oneshot
+Slice=claude.slice
+User=claude-agent
+Environment=HOME=/home/claude-agent
+TimeoutStartSec=15min
+ExecStart=/usr/bin/python3 /opt/agent-rules/hooks/wip-save.py --sweep /home/claude-agent/work

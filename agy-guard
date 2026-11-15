@@ -6,6 +6,14 @@
 # ~/.gemini/antigravity/conversations/ and a structured JSONL transcript in
 # ~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript_full.jsonl.
 #
+# Why this exists (2026-08-06):
+#   20:19  three conversations dispatched in parallel
+#   20:24  Antigravity reports done; the founder relays "it's done"
+#   20:27  Claude reviews the diff — 16 failing tests, no implementation
+#   20:36  the STILL-LIVE conversation reverts its own work byte-exact to HEAD
+#   20:39  a ledger is still being written, 15 minutes after "done"
+# "Done" was a human relaying an agent's self-report while the agent still had write access to the tree.
+#
 # Usage:
 #   agy-guard                          # default 3-minute quiet window across other conversations
 #   agy-guard 10                       # require 10 minutes of silence

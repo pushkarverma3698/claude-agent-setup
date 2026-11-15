@@ -19,8 +19,17 @@ unsaved() { # unsaved <dir>: 0 = something here is not on GitHub (uncommitted fi
   sha=$(git -C "$d" rev-parse HEAD 2>/dev/null) || return 0
   [ "$(git -C "$d" rev-list --count HEAD --not --remotes 2>/dev/null || echo 1)" -eq 0 ] && return 1
   # A squash-merged branch is gone from origin but GitHub still holds its commits (refs/pull/N/head): fetch by SHA proves it.
-  timeout 40 git -C "$d" fetch -q origin "$sha" >/dev/null 2>&1 && return 1
+  # Into an empty repo: in the worktree itself git skips the network for a commit it already has and exits 0 (2026-11-06).
+  on_github "$d" "$sha" && return 1
   return 0
+}
+on_github() { # on_github <dir> <sha>: 0 = origin serves <sha>
+  local s r=1
+  s=$(mktemp -d) || return 1
+  git init -q --bare "$s" && timeout 40 git -C "$s" fetch -q --depth=1 --filter=tree:0 \
+    "$(git -C "$1" remote get-url origin)" "$2" >/dev/null 2>&1 && r=0
+  rm -r -f -- "$s"
+  return $r
 }
 age_days() { # age_days <dir>: days since the newest of the folder, HEAD and index changed
   local d=$1 g n t=0 f

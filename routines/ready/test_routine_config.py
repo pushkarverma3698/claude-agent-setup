@@ -150,6 +150,44 @@ class SlotSkipWiring(unittest.TestCase):
         self.assertIn('slot_busy "$name" "$p" "$id" "$st" "$f"; then exit 0; fi', src)
 
 
+class Goal(unittest.TestCase):
+    """GOAL in a routine's conf: refused without a turn cap, in print mode, or too long for /goal."""
+
+    def check(self, goal, mode="", prompt="Do the job."):
+        funcs = extract(os.path.join(ROOT, "setup-claude-routines"), "check_goal")
+        d = tempfile.mkdtemp()
+        try:
+            write(f"{d}/p.md", prompt)
+            return subprocess.run(["bash", "-c", f'set -uo pipefail\n{funcs}\ncheck_goal demo "$1" "$2" "$3"', "x", goal, mode, f"{d}/p.md"],
+                                  capture_output=True, text=True)
+        finally:
+            shutil.rmtree(d)
+
+    def test_no_goal_and_a_capped_goal_pass(self):
+        for goal in ("", "the report was sent, or stop after 40 turns"):
+            self.assertEqual(self.check(goal).returncode, 0, goal)
+
+    def test_no_turn_cap_is_refused(self):
+        r = self.check("the report was sent")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("stop after N turns", r.stderr)
+
+    def test_print_mode_is_refused(self):
+        r = self.check("x, or stop after 5 turns", mode="print")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("MODE=print", r.stderr)
+
+    def test_too_long_is_refused(self):
+        r = self.check("x, or stop after 5 turns", prompt="p" * 3990)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("/goal takes 4000", r.stderr)
+
+    def test_claude_routine_passes_the_goal_to_the_session(self):
+        src = read(ROUTINE)
+        self.assertIn('[ -z "$GOAL" ] || task="/goal $task Done when: $GOAL"', src)
+        self.assertIn('-- "$task" </dev/null', src)
+
+
 class Paused(unittest.TestCase):
     """PAUSED=1 in a routine's conf: definition and drop-in stay, the timer does not run."""
     SETUP = os.path.join(ROOT, "setup-claude-routines")

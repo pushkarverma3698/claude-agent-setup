@@ -4,8 +4,12 @@
 #   1. Finished?   did the routine's last run finish (and when), or is it still running / paused / dead
 #   2. Merged      PRs merged since the previous verdict, each with the check that proved it (name + conclusion);
 #                  the conf's VERDICT_NOTE (e.g. "tests green and merged, not deployed") is printed under them
-#   3. Needs you   open PRs that fail a rule, a run that crashed or a check that could not read GitHub, and, when the
-#                  conf sets TRACKER_REPO, the tracker rows with Status Blocked (`tracker next --json`)
+#   3. Needs you   ONE numbered list of what only the founder can do (2026-11-07), one line each: a run that crashed or a check
+#                  that could not read GitHub, open PRs that fail a rule, then the founder ledger's open items for this
+#                  group's project and, when the conf sets TRACKER_REPO, the tracker rows with Status Blocked
+#                  (`tracker next --json`), oldest first. A line is the short text, its age (14d) and one link. A tracker row
+#                  that a ledger item names (its task id, or its issue/PR number) is listed once, as the ledger line, which
+#                  carries the steps. At most 10 lines, then "+N more".
 # A group with no run, nothing merged, nothing blocked and an empty queue prints one "idle" line. A group whose routine
 # has PAUSED=1 is skipped. A run that is paused on a usage limit says so; routine-sweep.timer restarts it.
 # The readiness rules below are unchanged; only the text is plain. The journal line keeps PROD-READY n/m. No model is involved:
@@ -30,10 +34,15 @@
 # VERDICT: YES only when the routine's run finished (systemd service ok AND its background session is
 # state=done), at least one routine PR exists and every one is ready; otherwise NO with the reasons.
 #
+# Founder ledger: ROUTINE_VERDICT_LEDGER (default /home/claude-agent/agent-jobs/founder-actions.md; missing or unreadable =
+# no items). An open item is one line: "- [ ] YYYY-MM-DD | <project> | <ref: URL or id> | <what> | <steps> | <what the agent
+# does after>"; "- [x]" lines are done and skipped. The group's project is LEDGER_PROJECT= in its conf, else the routine's
+# PROJ_<routine> name from routines.env, else the group name (case and punctuation ignored: bachelor-house = BachelorHouse).
+#
 # Env: DRY_RUN=1 prints instead of sending; ROUTINE_VERDICT_HOURS (26); ROUTINE_VERDICT_SINCE (ISO UTC);
 # ROUTINE_VERDICT_STATE (dir, default ~/.local/state/routine-verdict); ROUTINE_VERDICT_NOTIFY (claude-notify);
 # ROUTINE_VERDICT_BRANCH_RE (head-branch filter, for tests); ROUTINE_VERDICT_TRACKER (the tracker command, default
-# `tracker` on PATH); ROUTINE_VERDICT_WORK (/home/claude-agent/work) and ROUTINE_VERDICT_PROFILE_ENV
+# `tracker` on PATH); ROUTINE_VERDICT_LEDGER (see above); ROUTINE_VERDICT_WORK (/home/claude-agent/work) and ROUTINE_VERDICT_PROFILE_ENV
 # (/usr/local/bin/claude-profile-env) for where the run's Claude session is looked up (tests point them at fakes).
 # Exit 1 when GitHub could not be read or Telegram did not answer "sent".
 set -uo pipefail
@@ -50,6 +59,7 @@ NOTIFY=${ROUTINE_VERDICT_NOTIFY:-/usr/local/bin/claude-notify}
 BRANCH_RE=${ROUTINE_VERDICT_BRANCH_RE:-'^(feat/t[0-9]|task/issue-|fix/)'}
 STATE_DIR=${ROUTINE_VERDICT_STATE:-$HOME/.local/state/routine-verdict}
 TRACKER=${ROUTINE_VERDICT_TRACKER:-tracker}
+LEDGER=${ROUTINE_VERDICT_LEDGER:-/home/claude-agent/agent-jobs/founder-actions.md}
 WORK=${ROUTINE_VERDICT_WORK:-/home/claude-agent/work}
 PENV=${ROUTINE_VERDICT_PROFILE_ENV:-/usr/local/bin/claude-profile-env}
 
@@ -58,16 +68,18 @@ PENV=${ROUTINE_VERDICT_PROFILE_ENV:-/usr/local/bin/claude-profile-env}
 # exist AND be success on the head SHA, rule r) and VERDICT_QUEUE (a command printing "READY (n)" first; unset = count
 # the agent:ready/working/review issue labels). routine-new writes these; setup-claude-routines arms the timer.
 SPECS=() REQ=() GRPS=()
-declare -A ROUTINE_OF=() QUEUE_OF=() PAUSED_OF=() TRACKER_OF=() NOTE_OF=()
+declare -A ROUTINE_OF=() QUEUE_OF=() PAUSED_OF=() TRACKER_OF=() NOTE_OF=() LEDGER_OF=() CODE_OF=()
 for c in "$DEFS"/*.conf; do
   [ -e "$c" ] || continue
   n=$(basename "$c" .conf)
-  out=$( set +u; VERDICT=; VERDICT_QUEUE=; VERDICT_NOTE=; PAUSED=; TRACKER_REPO=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c" >/dev/null 2>&1
+  out=$( set +u; VERDICT=; VERDICT_QUEUE=; VERDICT_NOTE=; PAUSED=; TRACKER_REPO=; LEDGER_PROJECT=; CODE_REPO=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c" >/dev/null 2>&1
          [ -n "$VERDICT" ] || exit 0
          printf 'G\t%s\t%s\n' "$VERDICT" "$VERDICT_QUEUE"
          [ "$PAUSED" != 1 ] || printf 'P\t%s\t1\n' "$VERDICT"
          [ -z "$TRACKER_REPO" ] || printf 'T\t%s\t%s\n' "$VERDICT" "$TRACKER_REPO"
          [ -z "$VERDICT_NOTE" ] || printf 'N\t%s\t%s\n' "$VERDICT" "${VERDICT_NOTE//$'\n'/ }"
+         [ -z "$LEDGER_PROJECT" ] || printf 'L\t%s\t%s\n' "$VERDICT" "$LEDGER_PROJECT"
+         [ -z "$CODE_REPO" ] || printf 'C\t%s\t%s\n' "$VERDICT" "$CODE_REPO"
          for s in "${VERDICT_REPOS[@]}"; do printf 'S\t%s|%s\n' "$VERDICT" "$s"; done
          for s in "${VERDICT_CHECKS[@]}"; do printf 'R\t%s\n' "$s"; done )
   while IFS=$'\t' read -r k a b; do
@@ -77,6 +89,8 @@ for c in "$DEFS"/*.conf; do
       P) PAUSED_OF[$a]=1 ;;
       T) TRACKER_OF[$a]=$b ;;
       N) NOTE_OF[$a]=$b ;;
+      L) LEDGER_OF[$a]=$b ;;
+      C) CODE_OF[$a]=$b ;;
       S) SPECS+=("$a") ;;
       R) REQ+=("$a") ;;
     esac
@@ -256,6 +270,47 @@ tracker_blocked() { # group
   BLOCKED="[]" TRK_ERR="the task tracker (${TRACKER_OF[$1]}) could not be read, so blocked tasks are unknown"
 }
 
+# ---- the founder's list (2026-11-07): this group's open ledger items plus its Blocked tracker rows, oldest first. ITEMS gets one
+# line each: "<text cut to 90 chars> (<age>d) <link>". A tracker row that an open ledger item names (its T-id, or its issue/PR
+# number as bare #N, <word>#N where <word> ends the code repo's name, or a github.com/<code repo>/pull|issues/N URL) is dropped,
+# and the ledger line takes the row's link when its own ref is not a URL. Needs BLOCKED (tracker_blocked) first.
+read -r -d '' JQ_FOUNDER <<'JQ'
+def norm: ascii_downcase | gsub("[^a-z0-9]"; "");
+def days($s):
+  try (($s | if test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") then . + "T00:00:00Z" elif test("T[0-9]{2}:[0-9]{2}Z$") then sub("Z$"; ":00Z") else . end
+        | fromdateiso8601) as $t | ((now - $t) / 86400 | floor | if . < 0 then 0 else . end)) catch null;
+def isnum: test("^#[0-9]+$");
+def link_of: (.pr // "") as $p
+  | if $repo == "" then null
+    elif ($p | isnum) then "https://github.com/\($repo)/pull/\($p[1:])"
+    elif (.task | isnum) then "https://github.com/\($repo)/issues/\(.task[1:])"
+    else null end;
+def names($l): ($l.ref + " " + $l.what) as $t | .task as $id
+  | ([$id, (.pr // "")] | map(select(isnum) | .[1:])) as $ns
+  | (($id | test("^T-[0-9]+$")) and ($t | test("(?<![A-Za-z0-9])" + $id + "(?![0-9])")))
+    or any($ns[]; . as $n
+         | ($t | test("(?<![A-Za-z0-9])#" + $n + "(?![0-9])"))
+           or ([$t | scan("([A-Za-z-]+)#" + $n + "(?![0-9])")] | any(.[0] as $w | $repo | split("/") | last | ascii_downcase | endswith($w | ascii_downcase)))
+           or ($repo != "" and ($t | ascii_downcase | test("github\\.com/" + ($repo | ascii_downcase) + "/(pull|issues)/" + $n + "(?![0-9])"))));
+def cut: if length > 90 then .[0:89] + "…" else . end;
+
+( split("\n") | map(select(length > 0) | split("|") | map(gsub("^\\s+|\\s+$"; "")))
+  | map(select(length >= 4 and (.[1] | norm) == ($want | norm)) | {age: days(.[0]), ref: .[2], what: .[3]}) ) as $led
+| ($blk | map(. + {link: link_of})) as $rows
+| ( $led | map(. as $l | . + {link: ((if (.ref | test("^https?://")) then (.ref | split(" ")[0]) else null end)
+                                    // ([$rows[] | select(names($l)) | .link | select(. != null)][0]))}) ) as $ledger
+| ( $rows | map(select(. as $r | any($led[]; . as $l | $r | names($l)) | not))
+    | map({age: days(.updated // ""), what: "\(.task) \(.title // ""): \(.blocker // "no reason written")", link}) ) as $tracker
+| ($ledger + $tracker) | sort_by(-(.age // -1))
+| .[] | (.what | cut) + (if .age == null then "" elif .age == 0 then " (today)" else " (\(.age)d)" end) + (if .link then " " + .link else "" end)
+JQ
+founder_items() { # group; sets ITEMS (array of lines)
+  local want=${LEDGER_OF[$1]:-$(proj_of "${ROUTINE_OF[$1]}")}
+  ITEMS=()
+  mapfile -t ITEMS < <(sed -n 's/^- \[ \] //p' "$LEDGER" 2>/dev/null \
+    | jq -R -s -r --argjson blk "$BLOCKED" --arg want "$want" --arg repo "${CODE_OF[$1]:-}" "$JQ_FOUNDER" 2>/dev/null)
+}
+
 send() { # send <text>; sets rc=1 unless claude-notify answers sent
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '%s\n----\n' "$1"; return; fi
   local out; out=$("$NOTIFY" "$1" 2>&1); printf '%s\n' "$out"
@@ -373,7 +428,6 @@ for grp in "${GRPS[@]}"; do
   crashed=0; case "${RUN_WHY:-}" in *"service FAILED"*) crashed=1;; esac
   metrics_of "$grp"
   tracker_blocked "$grp"
-  nblocked=$(jq length <<<"$BLOCKED")
   merged=$(jq -r -n --slurpfile recsf <(printf '%s' "$allrecs") --arg since "$SINCE" --argjson max 5 '
     $recsf[0] | map(select(.state == "MERGED" and (.mergedAt // "") >= $since)) as $m
     | def short: sub("^[a-z]+(\\([^)]*\\))?!?: *"; "") | sub(" *\\((T-[0-9]+|#[0-9]+)\\)$"; "") | .[0:60];
@@ -387,22 +441,29 @@ for grp in "${GRPS[@]}"; do
     def why3: (.reason | plain_reason) as $p
       | if ($p | startswith("automated tests") or startswith("a required test")) then "tests failing" else $p[0:70] end;
     ($recs | map(select(.reason and .state == "OPEN" and ((.reason | plain_reason | test("pending")) | not))) | sort_by(-.number)) as $b
-    | ($b|length), ($b[0:$max][] | "• \(.title | short): \(why3)\n  \(.url)"),
-      (if ($b|length) > $max then "• +\(($b|length) - $max) more" else empty end)')
+    | ($b|length), ($b[0:$max][] | "\(.title | short): \(why3) \(.url)")')
   nopen=${open_items%%$'\n'*}; open_lines=${open_items#*$'\n'}; [ "$open_items" != "$nopen" ] || open_lines=""
-  need_lines="" nneed=0
-  if [ "$bad_local" = 1 ]; then need_lines+="• the daily check crashed on our side: ask a Claude session to fix the routine-verdict script."$'\n'; nneed=$((nneed + 1))
-  elif [ "$bad_read" = 1 ]; then need_lines+="• the daily check could not read GitHub: ask a Claude session to re-run the $proj report."$'\n'; nneed=$((nneed + 1)); fi
+  # The list: system problems first, then open PRs, then the founder's ledger items and Blocked tracker rows (oldest first).
+  # `need` holds one line per item; nneed counts every item, also the PRs past the 3 shown. 10 lines are printed, then "+N more".
+  need=() nneed=0
+  if [ "$bad_local" = 1 ]; then need+=("the daily check crashed on our side: ask a Claude session to fix the routine-verdict script."); nneed=$((nneed + 1))
+  elif [ "$bad_read" = 1 ]; then need+=("the daily check could not read GitHub: ask a Claude session to re-run the $proj report."); nneed=$((nneed + 1)); fi
   if [ "$crashed" = 1 ] || { [ "$norun" = 1 ] && { [ "$qbad" = 1 ] || [ "$qsum" -gt 0 ]; }; }; then
-    need_lines+="• the $proj build did not run (${reasons:-reason unknown}): ask a Claude session why."$'\n'; nneed=$((nneed + 1))
+    need+=("the $proj build did not run (${reasons:-reason unknown}): ask a Claude session why."); nneed=$((nneed + 1))
   elif [ "$RUN_OK" = 1 ] && [ "$total" -eq 0 ] && [ "$qbad" != 1 ] && [ "$qsum" -gt 0 ]; then
-    need_lines+="• the build finished but made no changes, although $(plural "$qsum" task) waiting: ask a Claude session why."$'\n'; nneed=$((nneed + 1))
+    need+=("the build finished but made no changes, although $(plural "$qsum" task) waiting: ask a Claude session why."); nneed=$((nneed + 1))
   fi
-  if [ "$nopen" -gt 0 ]; then need_lines+="$open_lines"$'\n'; nneed=$((nneed + nopen)); fi
-  if [ "$nblocked" -gt 0 ]; then
-    need_lines+=$(jq -r '.[] | "• \(.task) \(.title // ""): \(.blocker // "no reason written")"' <<<"$BLOCKED")$'\n'; nneed=$((nneed + nblocked))
-  fi
-  if [ -n "$TRK_ERR" ]; then need_lines+="• $TRK_ERR."$'\n'; nneed=$((nneed + 1)); fi
+  if [ -n "$TRK_ERR" ]; then need+=("$TRK_ERR."); nneed=$((nneed + 1)); fi
+  while IFS= read -r l; do [ -z "$l" ] || need+=("$l"); done <<<"$open_lines"
+  nneed=$((nneed + nopen))
+  founder_items "$grp"
+  for l in "${ITEMS[@]}"; do need+=("$l"); nneed=$((nneed + 1)); done
+  need_lines="" shown=0
+  for l in "${need[@]}"; do
+    [ "$shown" -lt 10 ] || break
+    shown=$((shown + 1)); need_lines+="$shown) $l"$'\n'
+  done
+  [ "$nneed" -le "$shown" ] || need_lines+="+$((nneed - shown)) more"$'\n'
   need_lines=${need_lines%$'\n'}
   # Fact 1
   if [ "$RUN_OK" = 1 ]; then

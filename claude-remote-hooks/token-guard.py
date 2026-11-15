@@ -7,8 +7,7 @@ prints is resent on every later call, and every byte the model writes into a too
 1% of a 5-hour window). Two incidents this enforces:
   2026-10-14  whole-repo `cat` loops, compacted 3x, then re-read the same files.
   2026-10-15  10 docs re-typed into Drive create_file: 159K output tokens to send one email.
-Heavy checks (lint/test/build/install) are no longer queued: 2026-10-29 the single lock
-serialized five builders for hours. Memory is bounded by claude.slice (MemoryMax 4.5G).
+Heavy checks (lint/test/build/install) wait for the heavy-check slot: token_guard/heavy.py, routines/bin/heavy-slot.
 
 Deny = exit 2, the reason on stderr goes back to Claude. `--pr-only` (the laptop hook) runs only the PR guards.
 `--check-body <repo> [<pr>]` (PR body on stdin) is the VPS merge wrapper's body check.
@@ -23,10 +22,12 @@ try:
     import token_guard
     token_guard.HOOK_DIR = HOOK_DIR  # routine-policy.json is read next to this file, before any rule module loads
     from token_guard.dispatch import check_dispatch
+    from token_guard.heavy import wrap_heavy
     from token_guard.merge import check_api_merge, check_local_ci_post, check_merge_now, guard_merge
     from token_guard.policy import body_missing, task_format
     from token_guard.pr import check_pr_create
     from token_guard.push import check_task_push
+    from token_guard.waits import check_wait
     from token_guard.reads import check_cat, check_connector, check_ranges, check_read
 except ImportError as e:  # a copy of this file without token_guard/: refuse loudly rather than guard nothing
     sys.stderr.write(f"BLOCKED by token-guard: its rules are missing ({e}). Copy the token_guard/ directory from "
@@ -55,6 +56,7 @@ def check_body_cli():
 def laptop(data):
     """--pr-only: the same PR, push and dispatch rules, none of the VPS token limits."""
     if data.get("tool_name") == "Bash":
+        check_wait(data.get("tool_input") or {})
         cmd, cwd = (data.get("tool_input") or {}).get("command", ""), data.get("cwd") or os.getcwd()
         for rule in LAPTOP_BASH:
             rule(cmd, cwd)
@@ -79,6 +81,7 @@ def vps(data):
     elif tool == "Read":
         check_read(ti, cwd)
     elif tool == "Bash":
+        check_wait(ti)
         cmd = ti.get("command", "")
         for rule in VPS_BASH:
             rule(cmd, cwd)
@@ -88,6 +91,13 @@ def vps(data):
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                 "permissionDecision": "allow", "updatedInput": new,
                 "permissionDecisionReason": "token-guard: merge runs only if the PR targets its repo's merge base"}}))
+            return
+        slotted = wrap_heavy(cmd)
+        if slotted:
+            new = dict(ti); new["command"] = slotted
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                "permissionDecision": "allow", "updatedInput": new,
+                "permissionDecisionReason": "token-guard: heavy check waits for the heavy-check slot"}}))
 
 
 def main():

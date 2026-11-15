@@ -14,7 +14,7 @@
 #   --tracker-repo <o/r>  repo holding the tracker CSV (default: <owner/repo>-tracker; created PRIVATE when missing)
 #   --tracker-path <p>  the CSV inside it (default: backlog.csv; seeded with a header and one example row when missing)
 #   --tz <zone>        zone of the HH:MM times, written as SCHEDULE_TZ (default: $NOTIFY_TZ, else UTC)
-#   --profile <list>    accounts in order, the first with usage left runs it (default: alt,alt2,main)
+#   --profile <list>    accounts, tried round-robin across runs; the first with usage left runs it (default: alt,alt2,main)
 #   --model <model>     lead model (default: opus; builders are Sonnet, set in the job file)
 #   --verdict-at <T>    verdict time, HH:MM:SS UTC (default: 6 h after the last HH:MM time; required otherwise)
 #   --boot-check <name> the CI check that boots the app: the verdict and branch protection require it

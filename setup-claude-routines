@@ -14,7 +14,7 @@
 #                   PROJ_<routine>=…, REPO_NAME_<verdict tag>=…; `-` in a name written as `_`) and AUTHOR=<github login>
 #                   (routine-verdict: whose PRs count).
 #     <name>.conf   bash fragment: PROFILE (main|alt|alt2, or a comma list such as alt,alt2,main: the
-#                   first account whose usage limit is not hit runs it), REPO (~/work/<REPO>), SCHEDULE
+#                   accounts tried round-robin, the first with usage left runs it), REPO (~/work/<REPO>), SCHEDULE
 #                   (space-separated HH:MM times, daily in SCHEDULE_TZ (default UTC): SCHEDULE="03:04 15:00" is one timer
 #                   with two OnCalendar lines; a string with a * or - is one systemd OnCalendar line, as before;
 #                   routines/bin/routine-schedule does the parsing), ARGS (extra claude flags, e.g. --model haiku --permission-mode dontAsk)
@@ -25,6 +25,8 @@
 #                   digest never arrived). The prompt just prints the message.
 #                   PAUSED=1 (optional): the routine keeps its definition and schedule drop-in but its timer is
 #                   stopped and disabled, and `claude-routine <name>` exits 0 at once. Unset or 0: runs as usual.
+#                   GOAL="<what done looks like>, or stop after N turns" (optional): the session starts as
+#                   `/goal <prompt> Done when: <GOAL>`, so a small model, not the lead, decides when the run is done.
 #                   VERDICT=<group>, VERDICT_AT=HH:MM:SS (UTC), VERDICT_REPOS=("tag|owner/repo|bases" …),
 #                   optional VERDICT_CHECKS=("owner/repo|check" …) and VERDICT_QUEUE="<cmd printing READY (n)>":
 #                   the code-only routine-verdict group for this routine (routine-new writes them)
@@ -61,6 +63,7 @@
 #     claude-clutter-clean.timer        daily 03:40: caches, old builds, stale worktrees and review checkouts (claude-clutter-clean)
 #     claude-remote-update.timer        nightly: claude update, then restart only idle, outdated Remote Control servers
 #     claude-session-reaper.timer       every 5 min: stop Remote Control sessions with no transcript write for IDLE_HOURS
+#     claude-wip-sweep.timer            every 10 min: wip-save.py --sweep ~/work, for sessions killed with no hook (SIGKILL, OOM)
 #     claude-remote@<profile>:<target>.service   one Remote Control server (claude-remote-serve); started by hand, not here
 #     (the six scripts behind these, and routine-worktree, are in routines/bin; they read optional HOST_LABEL, REVIEW_KEEP,
 #      TESTDB_CONTAINER from /etc/claude-routines/routines.env)
@@ -79,6 +82,15 @@ OVERLAY="${AGENT_OVERLAY_DIR:-}"
 DEFS="${ROUTINE_CONF_DIR:-${OVERLAY:+$OVERLAY/claude-routines}}"
 [ -n "$DEFS" ] && [ -d "$DEFS" ] || { echo "setup-claude-routines: no routine folder: set AGENT_OVERLAY_DIR or ROUTINE_CONF_DIR" >&2; exit 64; }
 
+# check_goal <name> <goal> <mode> <prompt-file>: /goal needs a turn cap, a --bg session, and fits 4000 characters with the prompt.
+check_goal() {
+  [ -n "$2" ] || return 0
+  [[ "$3" != print ]] || { echo "routine $1: GOAL needs a --bg session, not MODE=print" >&2; return 1; }
+  [[ "$2" == *"stop after "*" turns"* ]] || { echo "routine $1: GOAL must end \"or stop after N turns\"" >&2; return 1; }
+  local total=$(( $(wc -c <"$4") + ${#2} + 20 ))
+  [ "$total" -le 4000 ] || { echo "routine $1: prompt + GOAL is $total characters, /goal takes 4000" >&2; return 1; }
+}
+
 echo "== routines: check definitions in ${DEFS/#$HOME/~}"
 shopt -s nullglob
 vgroups=$(mktemp)
@@ -86,10 +98,11 @@ for c in "$DEFS"/*.conf; do
   n=$(basename "$c" .conf)
   [[ "$n" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "bad routine name: $n (a-z, 0-9, -)" >&2; exit 1; }
   [[ -f "$DEFS/$n.md" ]] || { echo "routine $n: missing $n.md" >&2; exit 1; }
-  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; PAUSED=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
+  ( set +u; PROFILE=; REPO=; SCHEDULE=; SCHEDULE_TZ=; MODE=; PAUSED=; GOAL=; ARGS=(); VERDICT=; VERDICT_AT=; VERDICT_REPOS=(); VERDICT_CHECKS=(); source "$c"
     [[ "$PROFILE" =~ ^(main|alt|alt2)(,(main|alt|alt2))*$ ]] || { echo "routine $n: PROFILE must be main, alt, alt2 or a comma list of them" >&2; exit 1; }
     [[ -z "${MODE:-}" || "$MODE" == print ]] || { echo "routine $n: MODE must be empty or print" >&2; exit 1; }
     [[ -z "${PAUSED:-}" || "$PAUSED" =~ ^[01]$ ]] || { echo "routine $n: PAUSED must be empty, 0 or 1" >&2; exit 1; }
+    check_goal "$n" "${GOAL:-}" "${MODE:-}" "$DEFS/$n.md" || exit 1
     [[ -n "$REPO" && -n "$SCHEDULE" ]] || { echo "routine $n: REPO and SCHEDULE are required" >&2; exit 1; }
     "$HERE/routines/bin/routine-schedule" "$SCHEDULE" "${SCHEDULE_TZ:-}" >/dev/null || { echo "routine $n: bad SCHEDULE" >&2; exit 1; }
     [ -n "$VERDICT" ] || exit 0
@@ -137,6 +150,7 @@ echo "== routines: scripts, units and job files (real files in this folder and t
 #   claude-notify, routine-verdict   -> /usr/local/bin
 #   routines/bin/*                   -> /usr/local/bin (claude-profile-env is sourced, so 644)
 #   routines/systemd/*               -> /etc/systemd/system
+#   routines/needrestart/claude.conf -> /etc/needrestart/conf.d (needrestart leaves claude-* units alone)
 #   routines/jobs/*.md               -> /home/claude-agent/agent-jobs (claude-agent owns them; founder-actions.md
 #                                       lives only there: it is runtime state, never copied)
 #   routines/ready/*                 -> /home/claude-agent/work (ready-set scripts; test_*.py stay in the repo)
@@ -164,6 +178,7 @@ for f in "$r"/bin/*; do
   put "$m" "/usr/local/bin/$n" "$f"
 done
 for f in "$r"/systemd/*; do put 644 "/etc/systemd/system/$(basename "$f")" "$f"; done
+[ ! -d /etc/needrestart/conf.d ] || put 644 /etc/needrestart/conf.d/claude.conf "$r/needrestart/claude.conf"   # never restart claude-* units
 # Retired 2026-10-31: the nightly claude-bgd-update restart. The wrapper lets the daemon upgrade itself in
 # place; a restart is now the only thing that kills workers. The daemon-reload further down picks up the drop-in removal.
 for f in /usr/local/bin/claude-bgd-update /etc/systemd/system/claude-remote-update.service.d/bgd.conf; do
@@ -263,7 +278,7 @@ systemctl daemon-reload
 systemctl enable --now routine-sweep.timer >/dev/null 2>&1
 # VPS housekeeping timers, moved into git 2026-11-02 (they were enabled on the VPS before; arm = enable, and start with the
 # stamp at now, so a re-install never fires a catch-up run). Their files come from routines/bin and routines/systemd above.
-for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper; do arm "$t.timer"; done
+for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper claude-wip-sweep; do arm "$t.timer"; done
 echo "  routine-sweep.timer next: $(systemctl show -p NextElapseUSecRealtime --value routine-sweep.timer)"
 settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
   if [ "$2" = 1 ]; then

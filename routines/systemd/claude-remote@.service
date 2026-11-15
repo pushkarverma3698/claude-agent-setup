@@ -10,6 +10,14 @@ StartLimitIntervalSec=0
 Slice=claude.slice
 User=claude-agent
 Environment=HOME=/home/claude-agent
+# 2026-11-04: phone sessions died on a usage limit and waited for someone to type; 850 min in 96 h, all 9 limit
+# stops in phone sessions, none in routines (claude-bgd@ has this since 10-27). The session now sleeps to the reset and
+# carries on. Here, not in settings.json: claude-routine's probes share that file and need the limit answer at once.
+Environment=CLAUDE_CODE_RETRY_WATCHDOG=1
+# Read by claude-wake-on-error: login and organisation errors, which the watchdog does not retry.
+Environment=CLAUDE_WAKE_ON_ERROR=1
+# Same Bash limits as claude-bgd@ (10-29): pushes and installs finish in the call instead of being sleep-polled.
+Environment=BASH_DEFAULT_TIMEOUT_MS=1200000 BASH_MAX_TIMEOUT_MS=1800000
 ExecStart=/usr/local/bin/claude-remote-serve %i
 # The TUI redraws its status screen every ~70s: 12 servers wrote ~100M/day to syslog (2026-10-21).
 StandardOutput=null

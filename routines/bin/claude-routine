@@ -4,6 +4,8 @@
 # A comma list of profiles: the run goes to the first account that answers a one-word haiku call
 # (2026-10-25: a nightly run died at once with "You've hit your session limit" because the one
 # account it ran on had spent its 5-hour window during the day).
+# The list is tried round-robin across all routines (2026-11-10): each run starts at the account after the one the last
+# run started on ($L/last-profile), so the hourly sweep no longer drains the first-listed account while the rest sit idle.
 # claude-routine                 (list the routines)
 # Starts one routine run as a background Claude session with Remote Control, in its own git worktree at a fixed
 # path (~/work/wt/<name>, optional BASE=<branch> in the conf; default origin/HEAD). No `-w`: that flag put the
@@ -26,6 +28,13 @@ notify() { local r; r=$(/usr/local/bin/claude-notify "$1" 2>&1) || true; logger 
 now_ist() { TZ=${NOTIFY_TZ:-UTC} date '+%H:%M'; }
 # One lock per routine, so two starts of the same routine do not replace each other's run.
 L=/home/claude-agent/.cache/claude-routine; mkdir -p "$L"
+# once_today <kind>: true the first time per routine and UTC day, so a failure repeated by the hourly sweep sends one
+# Telegram, not one an hour (2026-11-07: "did not start" went out 13 times in a day). Each attempt still reaches the journal.
+once_today() {
+  local m="$L/$name.$1-$(date -u +%F)"
+  [ ! -e "$m" ] || return 1
+  rm -f "$L/$name.$1-"*; : >"$m"
+}
 # 2026-10-29: probe_ok took any answer containing "ok" as usable ("OAuth token has expired" has "token") and an empty
 # one (120 s timeout, "529 overloaded") as out of usage: at 10:51 UTC alt2 and alt answered empty after a global OOM
 # and the run went to main on Opus. probe_verdict <answer> prints ok | auth | limit | retry.
@@ -34,17 +43,18 @@ probe_verdict() {
   a=$(printf '%s' "$a" | tr -d '[:space:]'); a=${a%.}
   if [ "$a" = ok ]; then echo ok
   elif [[ "${1,,}" == *"/login"* || "${1,,}" == *"oauth token"* || "${1,,}" == *authentication* || "${1,,}" == *"invalid api key"* ]]; then echo auth
+  elif [[ "${1,,}" == *"past due"* || "${1,,}" == *"can't use your claude subscription"* ]]; then echo billing
   elif [[ "${1,,}" == *limit* ]]; then echo limit
   else echo retry; fi
 }
 # probe_ok: the sourced profile answers "ok" to a one-word haiku call. Sets $ans (last answer) and $probe_why:
-# limit (out of usage), auth (login expired), unknown (empty / overloaded / timeout twice, 30 s apart).
+# limit (out of usage), auth (login expired), billing (subscription unpaid), unknown (empty / overloaded / timeout twice, 30 s apart).
 probe_ok() {
   local try v; probe_why=
   for try in 1 2; do
     ans=$(cd /tmp && timeout 120 "$claude" -p --model haiku "Reply with the single word ok" </dev/null 2>&1 || true)
     v=$(probe_verdict "$ans")
-    case $v in ok) return 0;; limit|auth) probe_why=$v; return 1;; esac
+    case $v in ok) return 0;; limit|auth|billing) probe_why=$v; return 1;; esac
     [ $try = 2 ] || sleep "${PROBE_RETRY_SLEEP:-30}"
   done
   probe_why=unknown; return 1
@@ -52,9 +62,19 @@ probe_ok() {
 probe_msg() { # probe_msg <profile>: one plain line for the log
   case $probe_why in
     limit) echo "$1: out of usage" ;;
+    billing) echo "$1: subscription unusable, payment past due ($(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100))" ;;
     auth) echo "$1: login expired or invalid, run /login for this account ($(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100))" ;;
     *) echo "$1: no usable answer twice (empty, overloaded or timed out; not treated as out of usage): $(printf '%s' "$ans" | tr '\n' ' ' | cut -c1-100)" ;;
   esac
+}
+
+# rotate <last> <profile…>: the profiles starting after <last>, wrapping round; <last> not among them: the list as given.
+rotate() {
+  local last=$1 i j; shift; local a=("$@")
+  for ((i = 0; i < ${#a[@]}; i++)); do [ "${a[$i]}" != "$last" ] || break; done
+  [ "$i" -lt ${#a[@]} ] || { echo "$*"; return; }
+  local out=(); for ((j = 1; j <= ${#a[@]}; j++)); do out+=("${a[$(( (i + j) % ${#a[@]} ))]}"); done
+  echo "${out[*]}"
 }
 
 # Record timestamps, not mtimes (2026-10-29): the lead file's mtime moved at 07:04 with its last record at 06:25.
@@ -85,7 +105,14 @@ if [ $# -eq 0 ]; then
     ( source "$c"; printf '%-28s %-14s %-24s %s\n' "$n" "$PROFILE" "$REPO" "$SCHEDULE" ); done
   exit 0
 fi
-MODE= BASE=
+# claude-routine --order <name>: the account order its next run would try (no probe, no start).
+if [ "${1:-}" = --order ]; then
+  [ -f "$D/${2:-}.conf" ] || { echo "claude-routine: no routine ${2:-} in $D" >&2; exit 64; }
+  ( source "$D/$2.conf"; IFS=, read -ra pl <<<"$PROFILE"
+    echo "$2: next run tries $(rotate "$(cat "$L/last-profile" 2>/dev/null || true)" "${pl[@]}") (last run started on $(cat "$L/last-profile" 2>/dev/null || echo none))" )
+  exit 0
+fi
+MODE= BASE= GOAL=
 # PAUSED=1 in the conf: the routine stays defined but does nothing, even on a manual `systemctl start`.
 exit_if_paused() {
   [ "${PAUSED:-0}" != 1 ] || { echo "claude-routine: $1 is paused (PAUSED=1)" >&2; exit 0; }
@@ -109,7 +136,8 @@ model=default; args=("$@")
 for i in "${!args[@]}"; do if [ "${args[$i]}" = --model ]; then model=${args[$((i+1))]:-default}; fi; done
 started=0 why="" need="" nl=$'\n'
 trap 'rc=$?; if [ $rc -ne 0 ] && [ "$started" = 0 ]; then
-  notify "$(title_of "$name") — ${need:+you need to: $need}${need:-nothing needed from you unless it fails again tomorrow.}${nl}It did not start today ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC}): ${why:-it failed before starting (exit $rc)}. Next try: its next scheduled run."; fi' EXIT
+  if ! once_today notstarted; then logger -t claude-routine "$name did not start again (exit $rc): ${why:-failed before starting}; Telegram already sent today" 2>/dev/null || true
+  else notify "$(title_of "$name") — ${need:+you need to: $need}${need:-nothing needed from you unless it fails again tomorrow.}${nl}It did not start today ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC}): ${why:-it failed before starting (exit $rc)}. Next try: its next scheduled run."; fi; fi' EXIT
 
 exec 9>"$L/$name.lock"
 flock -w 200 9 || { why="the previous run was still being restarted and held it up for over 3 minutes"; need="start it again by hand from the Claude app if you want it today."; exit 75; }
@@ -156,16 +184,19 @@ for w in "$W/$name" "$W/$name"-*; do
   else echo "kept $w: it has work that is not on GitHub"; fi
 done
 
-# The first listed account with usage left (probe_ok). A single profile is used as is.
+# The first account with usage left (probe_ok), tried round-robin from the one after the last run's. A single profile is used as is.
 profile=""
-for p in "${plist[@]}"; do
+read -ra order <<<"$(rotate "$(cat "$L/last-profile" 2>/dev/null || true)" "${plist[@]}")"
+for p in "${order[@]}"; do
   source /usr/local/bin/claude-profile-env "$p"
   [ ${#plist[@]} -gt 1 ] || { profile=$p; break; }
   if probe_ok; then profile=$p; break; fi
   echo "skip $(probe_msg "$p")"
-  [ "$probe_why" != auth ] || notify "$(title_of "$name") — you need to: run /login for the $(label_of "$p") account in the Claude app or on the server."$'\n'"Its login expired, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
+  [ "$probe_why" != billing ] || ! once_today "billing-$p" || notify "$(title_of "$name") — you need to: pay or renew the Claude subscription of the $(label_of "$p") account."$'\n'"Claude says its payment is past due, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
+  [ "$probe_why" != auth ] || ! once_today "auth-$p" || notify "$(title_of "$name") — you need to: run /login for the $(label_of "$p") account in the Claude app or on the server."$'\n'"Its login expired, so the run skipped it ($(now_ist) ${NOTIFY_TZ_LABEL:-UTC})."
 done
 [ -n "$profile" ] || { why="no Claude account answered with usage left (out of usage, signed out or overloaded; see the journal)"; need="nothing now. Start it by hand once an account has usage again, if you want it before the next scheduled run.";  echo "claude-routine: $name not started, no account ($profiles) answered with usage left" >&2; exit 75; }
+[ ${#plist[@]} -lt 2 ] || echo "$profile" >"$L/last-profile"
 source /usr/local/bin/claude-profile-env "$profile"
 if [ "$MODE" = print ]; then
   # No --bg session: run once, headless, and send the final stdout ourselves. The model only prints.
@@ -185,8 +216,9 @@ fi
 why="Claude's background service for the $(label_of "$profile") account is not running on the server"; need="ask in a Claude session to restart the service claude-bgd@$profile."
 bgd_ready "$profile"
 why="" need=""
-# The shared clone must be clean: every routine run branches from it.
-[ -z "$(git -C "$dir" status --porcelain)" ] || { why="the shared clone $dir has uncommitted changes"; need="ask a Claude session to clean $dir (or commit the changes), then start the routine."; exit 75; }
+# The shared clone must be clean: every routine run branches from it. Untracked files do not reach the worktree, so
+# they do not count (2026-11-06: an agent's stray pr-258-body.md kept oplify-api from starting for days, notifying hourly).
+[ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] || { why="the shared clone $dir has uncommitted changes"; need="ask a Claude session to clean $dir (or commit the changes), then start the routine."; exit 75; }
 timeout 120 git -C "$dir" fetch --prune --quiet origin || echo "git fetch failed; the worktree may start from an older origin"
 if [ -n "${BASE:-}" ]; then ref=origin/$BASE; else ref=$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD); fi
 wt="$W/$name"
@@ -201,7 +233,9 @@ if [ -f "$cfg" ] && [ "$(jq -r --arg d "$PWD" '.projects[$d].hasTrustDialogAccep
 fi
 
 label="routine: $name $(TZ=UTC date '+%Y-%m-%d %H:%M') UTC"
-out=$(timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" -n "$label" --remote-control "$label" "$@" -- "$(cat "$prompt")" </dev/null 2>&1) || {
+# GOAL in the conf: a separate small model decides when the run is done, instead of the lead stopping to report.
+task=$(cat "$prompt"); [ -z "$GOAL" ] || task="/goal $task Done when: $GOAL"
+out=$(timeout 90 "$claude" --bg --disallowedTools "$no_self_wakeups" -n "$label" --remote-control "$label" "$@" -- "$task" </dev/null 2>&1) || {
   printf '%s\n' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' >&2; echo "claude-routine: $name failed to start" >&2
   need="start it by hand from the Claude app if you want it today."; why="Claude refused to start the session on the $(label_of "$profile") account (technical detail: $(printf '%s' "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr '\n' ' ' | cut -c1-140))"; exit 1; }
 started=1
