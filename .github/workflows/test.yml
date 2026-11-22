@@ -25,6 +25,7 @@ jobs:
       - run: python3 routines/ready/test_routine_fixes.py
       - run: ./test_claude_notify.sh
       - run: python3 routines/ready/test_tracker.py
+      - run: python3 routines/ready/test_tracker_holds.py
       - run: bash routines/tests/test-claude-bgd.sh
       - run: python3 routines/ready/test_routine_config.py
       - run: bash routines/tests/test-routine-sweep.sh
