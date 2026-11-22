@@ -627,6 +627,39 @@ def at_cap(t, cfg):
     return held if cfg["cap"] and len(held) >= cfg["cap"] else []
 
 
+def worktree_held(repo_dir):
+    """{branch: [reasons]} for branches with unpushed work in a worktree of repo_dir (the worktree-holds helper bh-ready uses).
+    2026-11-22: a phone session held T-411 with 12 unpushed commits, but its row lease had passed, so `next` offered it as a
+    LEFTOVER and routine-sweep started bh-morning every 2h to find it taken. {} when the helper or repo is missing."""
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "worktree-holds")
+    if not repo_dir or not os.path.isdir(repo_dir) or not os.path.exists(path):
+        return {}
+    import importlib.machinery, importlib.util
+    loader = importlib.machinery.SourceFileLoader("worktree_holds", path)
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(mod)
+    try:
+        return mod.worktree_holds(repo_dir) or {}
+    except Exception as e:  # allow-failopen: a broken helper must not stop `next`; the row lease still applies
+        log(f"worktree-holds failed: {e}")
+        return {}
+
+
+def task_in_branch(tid, branch):
+    n = task_num(tid)
+    return n > 0 and any(int(m) == n for m in re.findall(r"(?<![a-z0-9])t(\d+)(?=-|$)", (branch or "").lower()))
+
+
+def hold_leftovers(t, cfg, groups, holds):
+    """Move leftovers whose task has unpushed worktree work into held, with the reason as holder."""
+    keep = []
+    for rec in groups["leftover"]:
+        tid = t.get(rec, cfg["ID_COL"])
+        why = [r for b, rs in holds.items() if task_in_branch(tid, b) for r in rs]
+        (groups["held_wt"].append((rec, "; ".join(why))) if why else keep.append(rec))
+    groups["leftover"] = keep
+
+
 def cmd_next(cfg, a):
     prs = merged_prs(cfg)
     heads = {p["headRefName"] for p in prs}
@@ -644,6 +677,8 @@ def cmd_next(cfg, a):
         if t.state(rec) in groups:
             groups[t.state(rec)].append(rec)
     groups["leftover"].sort(key=lambda r: parse_ts(t.get(r, "Updated")) or old)
+    groups["held_wt"] = []
+    hold_leftovers(t, cfg, groups, worktree_held(cfg.get("REPO_DIR")))
     groups["new"], groups["notready"] = groups["new"][:10], groups["notready"][:20]
     pick = (("LEFTOVER", groups["leftover"]) if groups["leftover"] else ("NEW", groups["new"]))
     first = pick[1][0] if pick[1] else None
@@ -651,7 +686,9 @@ def cmd_next(cfg, a):
     capped = at_cap(t, cfg) if pick[0] == "NEW" and first is not None else []
     if capped:  # the routine reads NEXT NONE as "stop starting tasks", which is the clean end of a run
         nxt = {"kind": "NONE", "reason": "builder cap", "cap": cfg["cap"], "held": capped}
+    wt = groups.pop("held_wt")
     d = {k: [describe(t, k, r) for r in recs] for k, recs in groups.items()}
+    d["held"] += [dict(summary(t, r), holder="worktree", reason=why) for r, why in wt]
     if a.json:
         print(json.dumps({"next": nxt, "changes": changes, **d}, indent=1))
         return
@@ -661,6 +698,9 @@ def cmd_next(cfg, a):
     for x in d["leftover"]:
         print(f"LEFTOVER {x['task']} | {x['title']} | {x['branch']} | {x['pr']} | {x['next_step']} | stale since {x['stale_since'] or 'unknown'}")
     for x in d["held"]:
+        if x.get("reason"):
+            print(f"HELD {x['task']} | worktree | skip: {x['reason']}")
+            continue
         print(f"HELD {x['task']} | {x['holder']} | {x['environment']} | {x['run']} | updated {x['age']} | skip: held by {x['holder']} until {x['lease_ends']}")
     for x in d["blocked"]:
         print(f"BLOCKED {x['task']} | {x['blocker']}")
