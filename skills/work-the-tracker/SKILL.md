@@ -28,6 +28,27 @@ If the project imports GitHub issues (`ISSUE_IMPORT=1`), ids look like `#246` an
 
 Examples use `T-12` and PR 34; the real ids come from `tracker next`.
 
+## Writing a task card
+
+Use this whenever you file work: an audit's findings, a bug you root-caused, a follow-up you leave behind. A builder who starts cold, months later, must be able to build from the card alone. A title-only card gets lost or built wrong.
+
+Every card has:
+1. **Problem**, with a measured number and its date ("0 of 312 rows sent, prod query 2026-11-22"), not an adjective.
+2. **Files**: paths and function names, each checked to exist when you write the card.
+3. **Repro**: one read-only command or query that shows the problem today. The builder re-runs it to see if the card is still true.
+4. **Done when**: measured on the real path (UI, API, bot, the deployed service), with a target number. "Tests pass" is not done.
+5. **Test loop**: the failing test to write first, the gate command, and the before/after numbers the PR must show.
+6. **Depends on**: other card ids, and the build order when several cards land together.
+7. **Decisions**: anything only the founder can decide, named as a question. The card stays Blocked until it has an `Answer <date>:` line.
+
+Before filing:
+- Measure the funnel stage by stage before blaming one stage. Fix the stage that loses the most, and file it first.
+- Search for what already exists: the repo, open PRs, the brain, official APIs and their terms, and how others solve it. Put what you found and rejected on the card, with the reason.
+- One problem per card. Split an audit into cards and add one ordering card or issue that lists them.
+- A public repo gets no personal data, no company or customer names and no private URLs. Describe the case ("an employer on platform X") and keep the specifics in the private tracker or the brain.
+
+Then re-read each card as the cold builder: could you start without asking anything? If not, add what is missing.
+
 ## Adding work from the phone
 
 Triggers: "idea: ...", "add task ...", "later: ...", "remember to build ...". Queue it; do not build it now.
