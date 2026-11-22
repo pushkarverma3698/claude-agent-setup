@@ -750,6 +750,9 @@ def cmd_claim(cfg, a):
     if st == "notready":
         raise Fail(2, f"{task} is not ready: {notready_reason(t, rec)}")
     leftovers = [t.get(r, idc) for r in t.rows() if t.state(r) == "leftover"]
+    if st == "new" and leftovers:  # a leftover held by unpushed worktree work is someone's live task, not ours to take
+        holds = worktree_held(cfg.get("REPO_DIR"))
+        leftovers = [x for x in leftovers if not any(task_in_branch(x, b) for b in holds)]
     if st == "new" and leftovers:
         raise Fail(4, f"leftover first: {', '.join(leftovers)}")
     capped = at_cap(t, cfg) if st == "new" else []
