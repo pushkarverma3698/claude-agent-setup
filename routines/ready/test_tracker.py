@@ -947,6 +947,21 @@ class TaskContext(Sandbox):
         self.assertEqual(self.tracker("sync").stdout.strip(), "nothing to sync")
         self.assertEqual(self.rows()["T-102"]["Next step"], "newer plan")
 
+    def test_60b_part_of_from_a_side_branch_leaves_the_rows_own_pr(self):
+        # 2026-11-22 T-411: side fix #182 (fix/matching-test-listing-expiry, "Part of T-411") merged while the task's own PR #181
+        # on feat/t411-* was open. Sync set PR=#182 and Next step to #182's Left, so the card sent the next builder to a merged PR.
+        self.put([row("T-102", status="In review", Holder="laptop:runA:abc", Branch="feat/t102-thing", PR="#12",
+                      **{"Next step": "review the webhook", "Updated": ago(1)})])
+        self.prs({"number": 13, "headRefName": "fix/unrelated-flaky-test", "mergedAt": iso_now(),
+                  "body": "Part of T-102\nLeft: the T-102 work itself (PR 12)\n"})
+        self.assertEqual(self.tracker("sync").stdout.strip(), "nothing to sync")
+        got = self.rows()["T-102"]
+        self.assertEqual((got["PR"], got["Next step"]), ("#12", "review the webhook"))
+        # a row with no branch yet still takes the PR, as before
+        self.put([row("T-102", status="Claimed", Holder="laptop:runA:abc", Updated=ago(1))])
+        self.tracker("sync")
+        self.assertEqual(self.rows()["T-102"]["PR"], "#13")
+
     def test_61_add_files_a_vague_task_as_blocked_with_the_reason(self):
         self.put([row("T-101", **{"Acceptance criteria": "returns 200"})], header=self.AC)
         r = self.tracker("add", "Idea")

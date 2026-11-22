@@ -462,6 +462,10 @@ def apply_sync(t, prs):
                 ts = parse_ts(t.get(rec, "Updated"))
                 if ts is not None and ts >= at.replace(second=0, microsecond=0) + dt.timedelta(minutes=1):
                     continue
+                # 2026-11-22 T-411: a side PR (another branch) that is "Part of" the task does not carry its PR or what is left;
+                # the row's own branch does. Taking side fix #182 hid the task's open PR #181 from the next builder.
+                if t.get(rec, "Branch") and pr.get("headRefName") and pr["headRefName"] != t.get(rec, "Branch"):
+                    continue
                 if t.get(rec, "PR") != f"#{n}" or (left and t.get(rec, "Next step") != left):
                     changes.append(f"{task} {st}: #{n} Part of merged" + (f", left: {left}" if left else ""))
                 t.set(rec, "PR", f"#{n}")
