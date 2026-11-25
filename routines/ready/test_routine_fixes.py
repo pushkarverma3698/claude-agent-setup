@@ -91,7 +91,9 @@ class ProbeAnswers(unittest.TestCase):
 
     def test_auth_errors(self):
         for a in ("OAuth token has expired. Please run /login", "Invalid API key · Please run /login",
-                  "API Error: 401 authentication_error"):
+                  "API Error: 401 authentication_error",
+                  # 2026-11-25: alt failed two days as "retry", so the /login alert never fired
+                  "Failed to authenticate: OAuth session expired and could not be refreshed"):
             self.assertEqual(self.verdict(a), "auth", a)
 
     def test_limit_text_only_is_out_of_usage(self):
