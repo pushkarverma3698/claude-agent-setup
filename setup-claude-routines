@@ -159,7 +159,11 @@ echo "== routines: scripts, units and job files (real files in this folder and t
 stage=$(ssh "$HOST" 'mktemp -d')
 ( cd "$HERE" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - claude-notify routine-verdict routines $( [ -d skills ] && echo skills ) ) | ssh "$HOST" "tar -xf - -C '$stage'"
 [ -z "$OVERLAY" ] || [ ! -d "$OVERLAY/routines" ] || ( cd "$OVERLAY" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - routines ) | ssh "$HOST" "tar -xf - -C '$stage'"
-ssh "$HOST" "sudo -n env STAGE='$stage' bash -s" <<'ROOT'
+# The overlay's own timers (routines/systemd/*.timer, not templates) are armed below like the housekeeping ones;
+# without this an overlay timer was copied to /etc/systemd/system and never enabled.
+overlay_timers=""
+[ -z "$OVERLAY" ] || [ ! -d "$OVERLAY/routines/systemd" ] || overlay_timers=$(ls "$OVERLAY/routines/systemd" | grep '\.timer$' | grep -v @ | tr '\n' ' ')
+ssh "$HOST" "sudo -n env STAGE='$stage' OVERLAY_TIMERS='$overlay_timers' bash -s" <<'ROOT'
 set -euo pipefail
 shopt -s nullglob   # an overlay without jobs/ or ready/ copies none
 put() { # put <mode> <dest> <src> [owner]: copies only when the bytes differ
@@ -279,6 +283,7 @@ systemctl enable --now routine-sweep.timer >/dev/null 2>&1
 # VPS housekeeping timers, moved into git 2026-11-02 (they were enabled on the VPS before; arm = enable, and start with the
 # stamp at now, so a re-install never fires a catch-up run). Their files come from routines/bin and routines/systemd above.
 for t in claude-agent-fetch claude-clutter-clean claude-remote-update claude-session-reaper claude-wip-sweep; do arm "$t.timer"; done
+for t in ${OVERLAY_TIMERS:-}; do arm "$t"; echo "  $t (overlay) next: $(systemctl show -p NextElapseUSecRealtime --value "$t")"; done
 echo "  routine-sweep.timer next: $(systemctl show -p NextElapseUSecRealtime --value routine-sweep.timer)"
 settle() { # settle <timer unit> <paused 0|1> <routine name>: arm the timer, or with PAUSED=1 stop and disable it (the drop-in stays)
   if [ "$2" = 1 ]; then
