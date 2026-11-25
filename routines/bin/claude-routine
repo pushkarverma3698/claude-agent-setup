@@ -42,7 +42,7 @@ probe_verdict() {
   local a=${1,,}
   a=$(printf '%s' "$a" | tr -d '[:space:]'); a=${a%.}
   if [ "$a" = ok ]; then echo ok
-  elif [[ "${1,,}" == *"/login"* || "${1,,}" == *"oauth token"* || "${1,,}" == *authentication* || "${1,,}" == *"invalid api key"* ]]; then echo auth
+  elif [[ "${1,,}" == *"/login"* || "${1,,}" == *"oauth token"* || "${1,,}" == *authenticat* || "${1,,}" == *"oauth session"* || "${1,,}" == *"invalid api key"* ]]; then echo auth
   elif [[ "${1,,}" == *"past due"* || "${1,,}" == *"can't use your claude subscription"* ]]; then echo billing
   elif [[ "${1,,}" == *limit* ]]; then echo limit
   else echo retry; fi
