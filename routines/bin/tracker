@@ -6,6 +6,8 @@
   tracker add "<title>" [--notes TXT] [--dry-run]   queue a new task (a new row)
   tracker unblock T-NNN [--note TXT]   his answer to a Blocked row: back in the queue (a leftover when it has a branch)
   tracker show T-NNN [--json]   the task card: every filled column, Next step, earlier PRs
+  tracker set T-NNN --field COL --value TXT   one cell (not the id, Status, Holder, Environment, Run or Updated)
+  tracker park|cancel T-NNN --note TXT   his call to stop a task (not Blocked: `next` skips it) | reopen T-NNN [--note TXT]
   every command takes --project NAME (or $TRACKER_PROJECT) or --conf PATH.
 
 Phone, laptop and VPS routine run the same commands; only this tool writes the CSV, through `gh api` (the contents API),
@@ -26,7 +28,8 @@ import argparse, base64, csv, datetime as dt, io, json, math, os, random, re, se
 import urllib.parse
 
 AGENT_COLS = ["Holder", "Environment", "Run", "Branch", "PR", "Blocker", "Next step", "Updated"]
-STATUSES = ["Not started", "Claimed", "Building", "In review", "Waiting", "Blocked", "Done"]
+STATUSES = ["Not started", "Claimed", "Building", "In review", "Waiting", "Blocked", "Parked", "Cancelled", "Done"]
+STOPPED = {"Parked", "Cancelled"}  # his call to stop a task: neither Blocked (no question waits) nor Done (deps on it stay unmet)
 ACTIVE = {"Claimed", "Building", "In review", "Waiting"}
 FMT = "%Y-%m-%dT%H:%MZ"
 
@@ -266,6 +269,8 @@ class Table:
         s = self.get(rec, self.cfg["STATUS_COL"]).lower()
         if s.startswith("in progress"):
             return "Building"
+        if s.startswith("cancel"):  # Canceled too
+            return "Cancelled"
         return next((x for x in STATUSES if s.startswith(x.lower())), "Not started" if not s else "Other")
 
     def deps_unmet(self, rec):
@@ -296,6 +301,8 @@ class Table:
             return "done"
         if st == "Blocked":
             return "blocked"
+        if st in STOPPED:
+            return st.lower()
         if st in ACTIVE:
             ts = parse_ts(self.get(rec, "Updated"))
             young = ts is not None and now() - ts < self.cfg["lease"]
@@ -686,7 +693,7 @@ def cmd_claim(cfg, a):
         raise Fail(2, f"the tracker has no {', '.join(t.missing())} column(s): run `tracker migrate` first")
     rec = need_row(t, task)
     st, g = t.state(rec), (lambda c: t.get(rec, c))
-    if st == "done" or st == "blocked" or st == "other":
+    if st in ("done", "blocked", "parked", "cancelled", "other"):
         raise Fail(2, f"{task} is {g(cfg['STATUS_COL'])}" + (f": {g('Blocker')}" if st == "blocked" else ""))
     if st == "held":
         ts = parse_ts(g("Updated"))
@@ -763,7 +770,7 @@ def cmd_claim(cfg, a):
     def fn(t2):
         rec2 = need_row(t2, task)
         s2 = t2.state(rec2)
-        if s2 in ("held", "done", "blocked"):
+        if s2 in ("held", "done", "blocked", "parked", "cancelled"):
             who = t2.get(rec2, "Holder") or "unknown"
             raise Fail(3, f"{task} was taken meanwhile ({s2}, holder {who}); branch {branch} stays claimed and shows up as a leftover in `tracker next`")
         t2.setmany(rec2, Status="Claimed", Holder=holder, Environment=env, Run=run, Branch=branch, Updated=stamp(), Blocker="")
@@ -1002,28 +1009,105 @@ def cmd_add(cfg, a):
     print(f"added {tid}: {title}{extra}\n{tracker_url(cfg)}")
 
 
+def append_note(t, rec, label, note):
+    """`<label> <date>: <note>` as a new line of the row's notes column, where the next builder reads it."""
+    if note:
+        col = notes_col(t, note, "or drop --note")
+        old = t.get(rec, col)
+        t.set(rec, col, (old + "\n" if old else "") + f"{label} {stamp()[:10]}: {note}")
+
+
+def requeue(t, rec):
+    """Back in the queue, whoever held it: a row with a branch becomes a leftover, so `next` hands that branch to the next builder
+    first; one without goes back to Not started. Returns (state, branch)."""
+    if t.get(rec, "Branch"):
+        t.setmany(rec, Status="Building", Holder="", Environment="", Run="", Blocker="", Updated="")
+    else:
+        t.setmany(rec, Status="Not started", **{k.replace(" ", "_"): "" for k in AGENT_COLS})
+    return t.state(rec), t.get(rec, "Branch")
+
+
+def requeued(verb, task, state, branch):
+    return f"{verb} {task}: " + {"leftover": f"leftover, `next` resumes {branch} first", "new": "Not started, ready for the next build"} \
+        .get(state, "Not started, still waiting on its dependencies")
+
+
 def cmd_unblock(cfg, a):
-    """His answer to a Blocked row, or a block that no longer holds: back in the queue, whoever held it. A row with a branch becomes a
-    leftover, so `next` hands that branch to the next builder first; one without goes back to Not started. --note is kept in the notes column."""
+    """His answer to a Blocked row, or a block that no longer holds: back in the queue (requeue). --note is kept in the notes column."""
     note = " ".join((a.note or "").split())
 
     def fn(t):
         rec = need_row(t, a.task)
-        st, was = t.status(rec), t.get(rec, "Blocker")
+        st = t.status(rec)
         if st != "Blocked":
             raise Fail(2, f"{a.task} is {st or 'empty'}, not Blocked")
-        if note:
-            col = notes_col(t, note, "or drop --note")
-            old = t.get(rec, col)
-            t.set(rec, col, (old + "\n" if old else "") + f"Answer {stamp()[:10]}: {note}")
-        if t.get(rec, "Branch"):
-            t.setmany(rec, Status="Building", Holder="", Environment="", Run="", Blocker="", Updated="")
-        else:
-            t.setmany(rec, Status="Not started", **{k.replace(" ", "_"): "" for k in AGENT_COLS})
-        return True, (t.state(rec), t.get(rec, "Branch"))
-    state, branch = mutate(cfg, f"tracker: unblock {a.task} ({identity(cfg)[2]})", fn)[0]
-    print(f"unblocked {a.task}: " + {"leftover": f"leftover, `next` resumes {branch} first", "new": "Not started, ready for the next build"}
-          .get(state, "Not started, still waiting on its dependencies"))
+        append_note(t, rec, "Answer", note)
+        return True, requeue(t, rec)
+    print(requeued("unblocked", a.task, *mutate(cfg, f"tracker: unblock {a.task} ({identity(cfg)[2]})", fn)[0]))
+
+
+def cmd_reopen(cfg, a):
+    """A Done, Parked or Cancelled row back in the queue. A Done row's branch is merged, so it starts over on a new one; a stopped row
+    with a branch is resumed from it."""
+    note = " ".join((a.note or "").split())
+
+    def fn(t):
+        rec = need_row(t, a.task)
+        st = t.status(rec)
+        if st != "Done" and st not in STOPPED:
+            raise Fail(2, f"{a.task} is {st or 'empty'}, not Done, Parked or Cancelled")
+        append_note(t, rec, "Reopened", note)
+        if st == "Done":
+            t.setmany(rec, Branch="", PR="")
+        return True, requeue(t, rec)
+    print(requeued("reopened", a.task, *mutate(cfg, f"tracker: reopen {a.task} ({identity(cfg)[2]})", fn)[0]))
+
+
+def stop_task(cfg, a, status):
+    """park/cancel: his call to stop a task, whoever holds it. The holder is cleared, so its builder's push hook (`check`) stops it;
+    the branch, PR and Next step stay for `reopen`. The reason goes in Blocker, which a stopped row has no other use for."""
+    note = " ".join(a.note.split())
+    if not note:
+        raise Fail(2, f"tracker {a.cmd} needs --note: why it stops")
+
+    def fn(t):
+        rec = need_row(t, a.task)
+        if t.status(rec) == "Done":
+            raise Fail(2, f"{a.task} is Done: nothing to stop")
+        t.setmany(rec, Status=status, Holder="", Environment="", Run="", Blocker=f"{status.lower()} {stamp()[:10]}: {note}", Updated=stamp())
+        return True, None
+    mutate(cfg, f"tracker: {a.cmd} {a.task} ({identity(cfg)[2]})", fn)
+    print(f"{status.lower()} {a.task}")
+
+
+def cmd_park(cfg, a):
+    stop_task(cfg, a, "Parked")
+
+
+def cmd_cancel(cfg, a):
+    stop_task(cfg, a, "Cancelled")
+
+
+def cmd_set(cfg, a):
+    """One cell, through the same compare-and-swap as every other write, so nobody rewrites the CSV by hand. The columns another
+    command owns are refused: Status has its commands, and Holder/Environment/Run/Updated are the lease that claim and release keep."""
+    def fn(t):
+        rec = need_row(t, a.task)
+        i = t.index(a.field)
+        if i < 0:
+            raise Fail(2, f"the tracker has no '{a.field}' column (it has: {', '.join(h for h in t.head.cells if h)})")
+        col = t.head.cells[i]
+        owned = {t.index(cfg["ID_COL"]): "the task id cannot change",
+                 t.index(cfg["STATUS_COL"]): "Status changes through a command: tracker park, cancel, reopen, unblock, block, beat or done"}
+        owned.update({t.index(c): f"{col} belongs to claim and release (the lease)" for c in ("Holder", "Environment", "Run", "Updated")})
+        if i in owned:
+            raise Fail(2, owned[i])
+        if (rec.cells[i] if i < len(rec.cells) else "") == a.value:
+            return False, (col, False)
+        t.set(rec, col, a.value)
+        return True, (col, True)
+    col, changed = mutate(cfg, f"tracker: set {a.task} {a.field} ({identity(cfg)[2]})", fn)[0]
+    print(f"set {a.task} {col}" if changed else f"{a.task} {col} unchanged")
 
 
 def cmd_check(args):
@@ -1069,6 +1153,13 @@ def main(argv=None):
     w.add_argument("task"), w.add_argument("--json", action="store_true")
     u = add("unblock")
     u.add_argument("task"), u.add_argument("--note")
+    s = add("set")
+    s.add_argument("task"), s.add_argument("--field", required=True), s.add_argument("--value", required=True)
+    for name in ("park", "cancel"):
+        x = add(name)
+        x.add_argument("task"), x.add_argument("--note", required=True)
+    o = add("reopen")
+    o.add_argument("task"), o.add_argument("--note")
     try:
         args = p.parse_args(argv)
         if args.cmd == "check":

@@ -878,5 +878,84 @@ class TaskContext(Sandbox):
         self.assertEqual(d["prs"][0]["left"], "the webhook")
 
 
+class SetParkReopen(Sandbox):
+    """2026-11-27 audit: with no command to change a field, park or cancel a task, agents rewrote the CSV with python and the auto-mode
+    classifier refused it (13 denials in 5 phone sessions); 3 of 26 Blocked rows were parked or cancelled tasks kept as Blocked."""
+    NOTES = HEADER + ["Notes"]
+
+    def puts(self):
+        return self.log("gh.log").count("-X PUT")
+
+    def test_70_set_changes_one_cell_and_refuses_the_columns_other_commands_own(self):
+        self.put([row("T-101", "keep, this", **{"Next step": "old"}), row("T-102", "é\nz", Updated="2026-11-01T10:00Z")])
+        before = readf(os.path.join(self.fake, "tracker.csv"))
+        r = self.tracker("set", "T-102", "--field", "next step", "--value", "wire the webhook, then test")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "set T-102 Next step")
+        got = self.rows()["T-102"]
+        self.assertEqual((got["Next step"], got["Updated"], got["Status"]), ("wire the webhook, then test", "2026-11-01T10:00Z", "Not started"))
+        after = readf(os.path.join(self.fake, "tracker.csv"))
+        self.assertEqual(after.split("\nT-102")[0], before.split("\nT-102")[0])  # header and T-101 byte-identical
+        n = self.puts()
+        r = self.tracker("set", "T-102", "--field", "Next step", "--value", "wire the webhook, then test")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "T-102 Next step unchanged"))
+        self.assertEqual(self.puts(), n)
+        for field, want in (("Nope", "no 'Nope' column"), ("Status", "tracker park"), ("Holder", "claim and release"),
+                            ("Updated", "claim and release"), ("Task ID", "the task id")):
+            r = self.tracker("set", "T-102", "--field", field, "--value", "x")
+            self.assertEqual(r.returncode, 2, field)
+            self.assertIn(want, r.stderr, field)
+        self.assertEqual(self.tracker("set", "T-999", "--field", "PR", "--value", "#1").returncode, 2)
+        self.assertEqual(self.puts(), n)
+
+    def test_71_park_and_cancel_leave_the_blocked_list_and_stop_the_holder(self):
+        self.put([row("T-101", status="Blocked", Blocker="needs founder: Parked by founder 10 Nov", Holder="old:run:abc", Updated=ago(30)),
+                  row("T-102", "Alpha"), row("T-103", status="Done", PR="#4"), row("T-104")])
+        r = self.tracker("claim", "T-102")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        wt = os.path.join(self.clones["a"], ".claude", "worktrees", "feat-t102-alpha")
+        p = self.tracker("park", "T-101", "--note", "after the launch", who="B")
+        self.assertEqual((p.returncode, p.stdout.strip()), (0, "parked T-101"), p.stderr)
+        c = self.tracker("cancel", "T-102", "--note", "superseded by T-104", who="B")
+        self.assertEqual((c.returncode, c.stdout.strip()), (0, "cancelled T-102"), c.stderr)
+        rows = self.rows()
+        self.assertEqual((rows["T-101"]["Status"], rows["T-101"]["Holder"]), ("Parked", ""))
+        self.assertRegex(rows["T-101"]["Blocker"], r"^parked \d{4}-\d\d-\d\d: after the launch$")
+        self.assertEqual((rows["T-102"]["Status"], rows["T-102"]["Holder"], rows["T-102"]["Branch"]), ("Cancelled", "", "feat/t102-alpha"))
+        self.assertRegex(rows["T-102"]["Blocker"], r"^cancelled \d{4}-\d\d-\d\d: superseded by T-104$")
+        out = self.tracker("next").stdout
+        self.assertEqual(out.splitlines()[0], "NEXT NEW T-104", out)
+        self.assertNotIn("T-101", out)
+        self.assertNotIn("T-102", out)
+        self.assertEqual(self.tracker("check", cwd=wt).returncode, 5)  # the builder of a cancelled task is told to stop
+        self.assertIn("is Parked", self.tracker("claim", "T-101").stderr)
+        r = self.tracker("park", "T-103", "--note", "x")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("T-103 is Done", r.stderr)
+        self.assertEqual(self.tracker("park", "T-104").returncode, 2)  # a reason is required
+
+    def test_72_reopen_puts_done_parked_or_cancelled_rows_back(self):
+        self.put([row("T-101", status="Parked", Branch="feat/t101-thing", PR="#5", Blocker="parked 2026-11-10: later"),
+                  row("T-102", status="Cancelled", Blocker="cancelled 2026-11-10: no"),
+                  row("T-103", status="Done", Branch="feat/t103-thing", PR="#7", Notes="spec"), row("T-104"),
+                  row("T-105", status="canceled")], header=self.NOTES)
+        r = self.tracker("reopen", "T-101")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "reopened T-101: leftover, `next` resumes feat/t101-thing first"), r.stderr)
+        got = self.rows()["T-101"]
+        self.assertEqual((got["Status"], got["Holder"], got["Blocker"], got["Branch"], got["PR"]), ("Building", "", "", "feat/t101-thing", "#5"))
+        r = self.tracker("reopen", "T-102")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "reopened T-102: Not started, ready for the next build"), r.stderr)
+        self.assertEqual((self.rows()["T-102"]["Status"], self.rows()["T-102"]["Blocker"]), ("Not started", ""))
+        r = self.tracker("reopen", "T-103", "--note", "the export  broke again")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        got = self.rows()["T-103"]
+        self.assertEqual((got["Status"], got["Branch"], got["PR"]), ("Not started", "", ""))  # a merged branch is not resumed
+        self.assertRegex(got["Notes"], r"^spec\nReopened \d{4}-\d\d-\d\d: the export broke again$")
+        self.assertEqual(self.tracker("reopen", "T-105").returncode, 0)  # the US spelling counts as Cancelled
+        r = self.tracker("reopen", "T-104")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("T-104 is Not started, not Done, Parked or Cancelled", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
