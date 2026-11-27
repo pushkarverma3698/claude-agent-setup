@@ -327,8 +327,6 @@ if "viewerPermission" in stdin:
     print("ADMIN")
 elif "git clone" in stdin:
     print("5. cloned (fake)")
-elif "cat >" in cmd and ".md" in cmd:
-    open(os.environ["FAKE_JOB_OUT"], "w").write(stdin)
 sys.exit(0)
 '''
 
@@ -355,7 +353,7 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         self.confs = f"{d}/confs"
         os.makedirs(self.confs)
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_STATE=self.state, FAKE_SSH_LOG=f"{d}/ssh.log",
-                        FAKE_JOB_OUT=f"{d}/job.md", FAKE_TRACKER_LOG=f"{d}/tracker.log", TRACKER_BIN=f"{self.bin}/tracker",
+                        ROUTINE_SKILLS_DIR=f"{d}/skills", SYNC_AGENT_RULES=f"{d}/none", FAKE_TRACKER_LOG=f"{d}/tracker.log", TRACKER_BIN=f"{self.bin}/tracker",
                         AGENT_RULES_HOST="vps-test", AGENT_SETUP_ENV=f"{d}/none", ROUTINE_CONF_DIR=self.confs,
                         HOME=f"{d}/home")  # routine-policy --install writes $HOME/.claude/hooks
         self.env.pop("AGENT_OVERLAY_DIR", None)
@@ -390,8 +388,13 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         # no labels anywhere
         self.assertNotIn("label", "\n".join(s["calls"]))
-        self.assertNotIn("gh label", read(f"{self.d}/job.md"))
-        self.assertNotIn("--label", read(f"{self.d}/job.md"))
+        skill = read(f"{self.d}/skills/shop-daily-run/SKILL.md")
+        self.assertTrue(skill.startswith("---\nname: shop-daily-run\ndescription: "), skill[:120])
+        self.assertNotIn("gh label", skill)
+        self.assertNotIn("--label", skill)
+        self.assertNotIn("agent-jobs/shop-daily", skill)
+        self.assertNotIn("{{", skill)
+        self.assertIn("Load the `shop-daily-run` skill", read(f"{self.confs}/shop-daily.md"))
         # the conf carries routine keys and tracker keys
         c = self.conf()
         for want in ('SCHEDULE="03:04 15:00"', "SCHEDULE_TZ=UTC", "REPO=shop", "BASE=beta", "VERDICT=shop-daily",
@@ -435,13 +438,13 @@ class RoutineNewEmptyRepo(unittest.TestCase):
         writes = [c for c in self.st()["calls"] if "-X PUT" in c or "-X POST" in c or c.startswith("repo create")]
         self.assertEqual(writes, [])
         self.assertEqual(os.listdir(self.confs), [])
-        self.assertFalse(os.path.exists(f"{self.d}/job.md"))
+        self.assertFalse(os.path.exists(f"{self.d}/skills"))
         self.assertFalse(os.path.exists(f"{self.d}/tracker.log"))
         self.assertFalse(os.path.exists(f"{self.d}/home/.claude/hooks/routine-policy.json"))
         for want in ("would: create the first commit", "would: create branch beta", "would: create the PRIVATE repo acme/shop-tracker",
                      "would: seed acme/shop-tracker/backlog.csv", "would: PUT branch protection on beta",
-                     "would: run tracker migrate", "would: write vps-test:/home/claude-agent/agent-jobs/shop-daily.md",
-                     "would: run setup-claude-routines", r"| GUARD_REPOS=('acme/shop|bases=beta|branch=^feat/t(\d+)-')",
+                     "would: run tracker migrate", "/skills/shop-daily-run/SKILL.md (", "would: run sync-agent-rules",
+                     "then setup-claude-routines (timers", r"| GUARD_REPOS=('acme/shop|bases=beta|branch=^feat/t(\d+)-')",
                      "guard policy with shop-daily.conf: acme/shop", "== left for you (2)", "0 check(s) would stop"):
             self.assertIn(want, r.stdout)
 

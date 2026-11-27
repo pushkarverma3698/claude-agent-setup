@@ -65,8 +65,9 @@ PENV=${ROUTINE_VERDICT_PROFILE_ENV:-/usr/local/bin/claude-profile-env}
 
 # Groups come from the routine definitions (2026-10-27; were hard-coded here): a <name>.conf with VERDICT=<group>
 # gives the group, VERDICT_REPOS (tag|owner/repo|bases, bases space separated), VERDICT_CHECKS (repo|check that must
-# exist AND be success on the head SHA, rule r) and VERDICT_QUEUE (a command printing "READY (n)" first; unset = count
-# the agent:ready/working/review issue labels). routine-new writes these; setup-claude-routines arms the timer.
+# exist AND be success on the head SHA, rule r) and VERDICT_QUEUE (a command printing "READY (n)" first; unset = the
+# new + leftover rows of `tracker next --conf <routine>.conf`; GitHub issue labels are no queue since 2026-11-27).
+# routine-new writes these; setup-claude-routines arms the timer.
 SPECS=() REQ=() GRPS=()
 declare -A ROUTINE_OF=() QUEUE_OF=() PAUSED_OF=() TRACKER_OF=() NOTE_OF=() LEDGER_OF=() CODE_OF=()
 for c in "$DEFS"/*.conf; do
@@ -178,17 +179,10 @@ JQ
 # ---- queue: what was waiting for the routine; sets QTXT and QN (-1 = unreadable) --------------------
 queue_of() { # tag repo group
   QTXT="" QN=0
-  if [ -n "${QUEUE_OF[$3]:-}" ]; then
-    local n; n=$(timeout 90 bash -c "${QUEUE_OF[$3]}" 2>/dev/null | sed -n 's/^READY (\([0-9][0-9]*\)).*/\1/p' | head -1)
-    if [ -z "$n" ]; then QTXT="$1 ?"; QN=-1; else QTXT="$1 $n ready"; QN=$n; fi
-    return
-  fi
-  local l c t=""
-  for l in ready working review; do
-    if c=$(gh issue list -R "$2" --label "agent:$l" --state open -L 1000 --json number --jq length 2>/dev/null) && [[ $c =~ ^[0-9]+$ ]]
-    then QN=$((QN + c)); t+="$l $c, "; else QN=-1; t+="$l ?, "; fi
-  done
-  QTXT="$1 ${t%, }"
+  local n q=${QUEUE_OF[$3]:-}
+  [ -n "$q" ] || q="$(printf %q "$TRACKER") next --json --conf $(printf %q "$DEFS/${ROUTINE_OF[$3]}.conf") | python3 -c 'import json,sys; d=json.load(sys.stdin); print(\"READY (%d)\" % (len(d[\"new\"]) + len(d[\"leftover\"])))'"
+  n=$(timeout 90 bash -c "$q" 2>/dev/null | sed -n 's/^READY (\([0-9][0-9]*\)).*/\1/p' | head -1)
+  if [ -z "$n" ]; then QTXT="$1 ?"; QN=-1; else QTXT="$1 $n ready"; QN=$n; fi
 }
 
 # ---- run status of the routine behind a group; sets RUN_OK and RUN_WHY -----------------------------

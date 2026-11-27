@@ -17,9 +17,9 @@ or change an entry, never remove a default one.
   branch   task branch regex, group 1 = the task id: a push needs the branch claimed on GitHub first, and a builder
            prompt `task <owner/repo>#<id>` (or the repo's `builder` phrase) needs `branch <b> claim <sha>`.
   from     the branch a claim is cut from (default: bases[0]).
-  closes   "issue": a PR body that closes, fixes or resolves #N must come from a head branch matching `branch` with
-           task id N (2026-10-30: an ad-hoc session could build issue N on any branch; the queue and the claim never
-           saw it and the nightly scheduler rebuilt the issue).
+  closes   "task": a PR body that closes, fixes or resolves T-N must come from a head branch matching `branch` with
+           task id N (2026-10-30: an ad-hoc session could build task N on any branch; the queue and the claim never
+           saw it and the nightly scheduler rebuilt it. Was "issue" with #N until the issue queue retired, 2026-11-27).
 """
 import json, os, re
 
@@ -63,7 +63,7 @@ PR_BASES = {r: tuple(p["bases"]) for r, p in POLICY.items()}
 STATUS = {r: p["status"] for r, p in POLICY.items() if p.get("status")}
 TASK_LINE_REPOS = tuple(r for r, p in POLICY.items() if p.get("task") == "T-NNN")
 CLAIMED = {r: p["branch"] for r, p in POLICY.items() if p.get("branch")}
-CLOSES_ISSUE = tuple(r for r, p in POLICY.items() if p.get("closes") == "issue" and p.get("branch"))
+CLOSES_TASK = tuple(r for r, p in POLICY.items() if p.get("closes") == "task" and p.get("branch"))
 RUNNER = {p["status"]: p["runner"] for p in POLICY.values() if p.get("status") and p.get("runner")}
 TASK_LINE_HELP = "a line `Closes T-NNN` (whole task) or `Part of T-NNN` plus `Left: <criteria>` (a slice)"
 

@@ -3,9 +3,9 @@
 
   tracker sync | next [--json] | claim T-NNN [--slug s] [--worktree P] | beat T-NNN [--status S] [--pr N] [--next TXT]
   tracker block T-NNN "<text>" --needs founder|stakeholder | done T-NNN --pr N | release T-NNN | check [T-NNN] | migrate
-  tracker add "<title>" [--notes TXT] [--dry-run]   queue a new task (a new row, or a new GitHub issue when ISSUE_IMPORT=1)
+  tracker add "<title>" [--notes TXT] [--dry-run]   queue a new task (a new row)
   tracker unblock T-NNN [--note TXT]   his answer to a Blocked row: back in the queue (a leftover when it has a branch)
-  tracker show T-NNN [--json]   the task card: every filled column, Next step, earlier PRs (issue mode: the issue body and comments)
+  tracker show T-NNN [--json]   the task card: every filled column, Next step, earlier PRs
   every command takes --project NAME (or $TRACKER_PROJECT) or --conf PATH.
 
 Phone, laptop and VPS routine run the same commands; only this tool writes the CSV, through `gh api` (the contents API),
@@ -65,8 +65,8 @@ def repo_of_url(url):
 
 
 KEYS = ["TRACKER_REPO", "TRACKER_PATH", "TRACKER_BRANCH", "CODE_REPO", "REPO_DIR", "WORK_BASE", "WORKTREE_ROOT", "BRANCH_FMT",
-        "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE",
-        "ISSUE_IMPORT", "ISSUE_REPO", "ISSUE_STATUS", "NOTES_COL", "CRITERIA_COL", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
+        "ID_COL", "ID_RE", "TITLE_COL", "STATUS_COL", "DEPS_COL", "ORDER_COLS", "ROW_FILTER", "BLOCK_COL", "BLOCK_RE", "ISSUE_IMPORT",
+        "NOTES_COL", "CRITERIA_COL", "LEASE_HOURS", "MAX_BUILDERS", "NOTIFY_CMD", "TRACKER_ENV", "TRACKER_RUN"] + ["COL_" + c.upper().replace(" ", "_") for c in AGENT_COLS]
 
 
 def load_conf(args, project_hint=""):
@@ -94,16 +94,10 @@ def load_conf(args, project_hint=""):
             raise Fail(2, f"{path}: {k} is not set")
     d = {"TRACKER_BRANCH": "main", "BRANCH_FMT": "feat/t{num}-{slug}", "ID_COL": "Task ID", "ID_RE": r"T-\d+", "TITLE_COL": "Title",
          "STATUS_COL": "Status", "DEPS_COL": "Depends on", "ORDER_COLS": "Milestone", "LEASE_HOURS": "6", "MAX_BUILDERS": "3", "NOTIFY_CMD": "claude-notify"}
-    if c.get("ISSUE_IMPORT") == "1":  # the queue is GitHub issues: rows are `#<number>`
-        d |= {"ID_RE": r"#\d+", "BLOCK_COL": "Blocked by", "BLOCK_RE": r"\S.*", "ISSUE_REPO": c["CODE_REPO"],
-              "ISSUE_STATUS": "agent:blocked=Blocked,agent:ready=Not started,agent:working=Not started"}
+    if c.get("ISSUE_IMPORT"):  # GitHub issues are no longer a queue (2026-11-27): the tracker CSV is the only one
+        raise Fail(2, f"{path}: ISSUE_IMPORT was removed; move the issues into the CSV and drop the key")
     for k, v in d.items():
         c.setdefault(k, v)
-    if c.get("ISSUE_IMPORT") == "1":
-        c["issue_status"] = [(k.strip().lower(), v.strip()) for k, _, v in (x.partition("=") for x in c["ISSUE_STATUS"].split(",")) if k.strip()]
-        bad = [v for _, v in c["issue_status"] if v not in STATUSES]
-        if bad:
-            raise Fail(2, f"{path}: ISSUE_STATUS has unknown status {bad[0]!r}")
     name = c["CODE_REPO"].split("/")[-1]
     c.setdefault("REPO_DIR", next((p for p in (os.path.expanduser(f"~/work/{name}"), os.path.expanduser(f"~/Projects/{name}")) if os.path.isdir(p)), ""))
     if c["REPO_DIR"]:
@@ -181,9 +175,9 @@ def merged_prs(cfg):
     return sorted(prs, key=lambda p: p.get("mergedAt") or "")
 
 
-def remote_branches(cfg):
-    """{branch: sha} for every branch under the fixed prefix of BRANCH_FMT (feat/t for feat/t{num}-{slug})."""
-    prefix = cfg["BRANCH_FMT"].split("{")[0]
+def remote_branches(cfg, prefix=None):
+    """{branch: sha} for every branch under the fixed prefix of BRANCH_FMT (feat/t for feat/t{num}-{slug}), or under prefix."""
+    prefix = prefix or cfg["BRANCH_FMT"].split("{")[0]
     refs = json_stream(gh_out("api", "--paginate", f"repos/{cfg['CODE_REPO']}/git/matching-refs/heads/{prefix}"))
     return {r["ref"][len("refs/heads/"):]: r["object"]["sha"] for r in refs}
 
@@ -275,8 +269,12 @@ class Table:
         return next((x for x in STATUSES if s.startswith(x.lower())), "Not started" if not s else "Other")
 
     def deps_unmet(self, rec):
+        """The deps not Done yet: ids of this file, and `<project>:<id>` rows of another project's tracker."""
         done = {self.get(r, self.cfg["ID_COL"]) for r in self.id_rows() if self.status(r) == "Done"}
-        return [d for d in re.findall(self.cfg["ID_RE"], self.get(rec, self.cfg["DEPS_COL"])) if d not in done]
+        text = self.get(rec, self.cfg["DEPS_COL"])
+        xrefs = XREF.findall(text)
+        local = re.findall(self.cfg["ID_RE"], XREF.sub(" ", text))
+        return [d for d in local if d not in done] + [f"{p}:{i}" for p, i in xrefs if i not in done_elsewhere(p)]
 
     def blocked_by(self, rec):
         c = self.cfg
@@ -329,6 +327,23 @@ def unready_reason(text):
     if gates and not ANSWER.search(text, gates[-1].end()):
         return f"waits on a decision ({gates[-1].group(0)!r})"
     return ""
+
+
+XREF = re.compile(r"\b([A-Za-z][\w-]*):([A-Za-z]*-?\d+)\b")  # `oplify-api:T-344`, a dependency in another project's tracker
+XDONE = {}
+
+
+def done_elsewhere(project):
+    """Done ids of another project's tracker, fetched once per run. A project that cannot be read counts nothing Done, so the
+    dependent row waits (and says which project) instead of being built early."""
+    if project not in XDONE:
+        try:
+            t2 = fetch(load_conf(argparse.Namespace(conf=None, project=project)))[1]
+            XDONE[project] = {t2.get(r, t2.cfg["ID_COL"]) for r in t2.id_rows() if t2.status(r) == "Done"}
+        except Fail as e:  # allow-failopen: fails closed, the dependent row stays NOT READY
+            log(f"dependency project {project} unreadable ({e}); rows depending on it wait")
+            XDONE[project] = set()
+    return XDONE[project]
 
 
 def task_num(task):
@@ -512,37 +527,6 @@ def summary(t, rec):
             "blocker": g("Blocker"), "updated": g("Updated")}
 
 
-BLOCKED_BY = re.compile(r"^[\s*_>-]*blocked by[\s:*_]*(.*)$", re.I | re.M)
-ISSUE_REF = re.compile(r"(?:\b([\w.-]+/[\w.-]+))?#(\d+)")
-CAN_RELABEL = {"Not started", "Blocked"}  # Waiting is active: a holderless Waiting row is a leftover, not relabelable
-
-
-class IssueStates:
-    """{number: 'open'|'closed'} per repo, one `gh issue list` per repo per run."""
-    def __init__(self):
-        self.cache = {}
-
-    def of(self, repo):
-        if repo.lower() not in self.cache:
-            out = json.loads(gh_out("issue", "list", "-R", repo, "--state", "all", "-L", "1000", "--json", "number,state") or "[]")
-            self.cache[repo.lower()] = {i["number"]: i["state"].lower() for i in out}
-        return self.cache[repo.lower()]
-
-
-def issue_blockers(cfg, body, states):
-    """(same-repo '#N' list, other-repo 'owner/repo#N' list) of the blockers still open; a blocker GitHub does not list stays."""
-    here, same, other = cfg["ISSUE_REPO"].lower(), [], []
-    for line in BLOCKED_BY.finditer(body or ""):
-        for repo, num in ISSUE_REF.findall(line.group(1)):
-            repo = repo or cfg["ISSUE_REPO"]
-            if states.of(repo).get(int(num), "open") != "open":
-                continue
-            ref, bucket = (f"#{num}", same) if repo.lower() == here else (f"{repo}#{num}", other)
-            if ref not in bucket:
-                bucket.append(ref)
-    return same, other
-
-
 def new_rec(t):
     """Append an empty record to t (the last record gets a line end first if the file had none)."""
     if t.recs[-1].raw and not re.search(r"[\r\n]$", t.recs[-1].raw):
@@ -552,55 +536,11 @@ def new_rec(t):
     return rec
 
 
-def apply_issue_import(t, open_issues, states):
-    """GitHub issues are the truth: add rows for new open issues, Done for closed ones, keep only open blockers in the dep columns."""
-    cfg, changes, idc = t.cfg, [], t.cfg["ID_COL"]
-    rows = {t.get(r, idc): r for r in t.id_rows()}
-    label_of = lambda labels: next(((key, st) for key, st in cfg["issue_status"] if key == "*" or key in labels), (None, None))
-    is_open = {f"#{i['number']}" for i in open_issues}
-    for task, rec in rows.items():
-        if task not in is_open and t.status(rec) != "Done" and states.of(cfg["ISSUE_REPO"]).get(int(task[1:])) == "closed":
-            changes.append(f"{task} Done (issue closed)")
-            t.setmany(rec, Status="Done", Updated=stamp(), **{"Next step": "", "Blocker": ""})
-    for i in sorted(open_issues, key=lambda i: i["number"]):
-        task, labels = f"#{i['number']}", {l["name"].lower() for l in i.get("labels", [])}
-        key, want = label_of(labels)
-        rec = rows.get(task)
-        if rec is None:
-            if want is None:
-                continue
-            rec = new_rec(t)
-            for col, val in ((idc, task), (cfg["TITLE_COL"], i["title"]), ("Status", want)):
-                t.set(rec, col, val)
-            if want == "Blocked":
-                t.set(rec, "Blocker", f"issue label {key}")
-            rec.dirty = True
-            changes.append(f"{task} added ({want})")
-        else:
-            if not t.get(rec, cfg["TITLE_COL"]) and i["title"]:
-                t.set(rec, cfg["TITLE_COL"], i["title"])
-            if want and want != t.status(rec) and t.status(rec) in CAN_RELABEL and not t.get(rec, "Holder"):
-                changes.append(f"{task} {t.status(rec)} -> {want} (label)")
-                t.set(rec, "Status", want)
-                if want == "Blocked" and not t.get(rec, "Blocker"):
-                    t.set(rec, "Blocker", f"issue label {key}")
-        same, other = issue_blockers(cfg, i.get("body"), states)
-        for col, new, word in ((cfg["DEPS_COL"], same, "depends on"), (cfg["BLOCK_COL"], other, "blocked by")):
-            if re.findall(r"\S+#\d+|#\d+", t.get(rec, col)) != new:
-                t.set(rec, col, ", ".join(new))
-                changes.append(f"{task} {word} {', '.join(new)}" if new else f"{task} no longer {word} anything open")
-    return changes
-
-
 def cmd_sync(cfg, a, quiet=False):
     prs = merged_prs(cfg)
-    imp = cfg.get("ISSUE_IMPORT") == "1"
-    issues = json.loads(gh_out("issue", "list", "-R", cfg["ISSUE_REPO"], "--state", "open", "-L", "1000",
-                               "--json", "number,title,labels,body") or "[]") if imp else []
-    states = IssueStates()
 
     def fn(t):
-        c = (apply_issue_import(t, issues, states) if imp else []) + apply_sync(t, prs)  # import first, so a merged Closes settles in one sync
+        c = apply_sync(t, prs)
         return bool(c), c
     changes, _ = mutate(cfg, f"tracker: sync ({identity(cfg)[2]})", fn)
     if not quiet:
@@ -768,6 +708,9 @@ def cmd_claim(cfg, a):
     if st == "leftover":
         heads = {p["headRefName"] for p in merged_prs(cfg)}
         have = remote_branches(cfg)
+        if g("Branch") and g("Branch") not in have:
+            # a row from before a BRANCH_FMT change (Oplify task/issue-N-* to feat/tN-*, 2026-11-27) keeps its own branch
+            have.update((b, s) for b, s in remote_branches(cfg, g("Branch")).items() if b == g("Branch"))
         rx = branch_re(cfg, task)
         branch = g("Branch") if g("Branch") in have else next((b for b in sorted(have) if rx.fullmatch(b) and b not in heads), "")
     else:
@@ -841,7 +784,7 @@ def cmd_claim(cfg, a):
         log(f"task card not printed ({e}): run `tracker show {task}`")
 
 
-CARD_CAP = 3000  # characters per column value, issue body or comment: a card is read by a builder, not archived
+CARD_CAP = 3000  # characters per column value: a card is read by a builder, not archived
 
 
 def card_value(name, val, cap=CARD_CAP):
@@ -852,19 +795,14 @@ def card_value(name, val, cap=CARD_CAP):
     return [f"{name}: {lines[0]}"] if len(lines) == 1 else [f"{name}:"] + [f"  {x}" for x in lines]
 
 
-def issue_view(cfg, task):
-    out = gh_out("issue", "view", task.lstrip("#"), "-R", cfg["ISSUE_REPO"], "--json", "title,body,comments")
-    return json.loads(out or "{}")
-
-
 def card(cfg, t, task):
     """Everything a builder needs to start on `task` without asking: the row's filled columns, where the work stands, the merged PRs
-    that named it and, in issue mode, the issue body and its last comments (his answers land there)."""
+    that named it."""
     rec = need_row(t, task)
     skip = {cfg["ID_COL"], cfg["TITLE_COL"], cfg["STATUS_COL"]} | {cfg["cols"][a] for a in AGENT_COLS}
     d = {"task": task, "title": t.get(rec, cfg["TITLE_COL"]), "status": t.status(rec), "ready": "",
          "columns": [(h, t.get(rec, h)) for h in t.head.cells if h not in skip and t.get(rec, h)],
-         "work": [(a, t.get(rec, a)) for a in ("Branch", "PR", "Next step", "Blocker") if t.get(rec, a)], "prs": [], "issue": None}
+         "work": [(a, t.get(rec, a)) for a in ("Branch", "PR", "Next step", "Blocker") if t.get(rec, a)], "prs": []}
     if d["status"] == "Not started":
         d["ready"] = notready_reason(t, rec) or "ready"
     for pr in merged_prs(cfg):
@@ -873,10 +811,6 @@ def card(cfg, t, task):
         if hit:
             d["prs"].append({"number": pr["number"], "kind": hit[0], "merged": (pr.get("mergedAt") or "")[:10],
                              "head": pr.get("headRefName", ""), "left": left})
-    if cfg.get("ISSUE_IMPORT") == "1":
-        i = issue_view(cfg, task)
-        d["issue"] = {"body": i.get("body") or "", "comments": [{"author": (c.get("author") or {}).get("login", "?"), "body": c.get("body") or ""}
-                                                                for c in (i.get("comments") or [])[-5:]]}
     return d
 
 
@@ -885,12 +819,6 @@ def card_lines(cfg, t, task, d=None):
     out = [f"TASK CARD {d['task']} | {d['title']}", f"Status: {d['status']}" + (f" ({d['ready']})" if d["ready"] else "")]
     for name, val in d["columns"] + d["work"]:
         out += card_value(name, val)
-    if d["issue"] is not None:
-        out += card_value("Issue body", d["issue"]["body"] or "(empty)", 2 * CARD_CAP)
-        if d["issue"]["comments"]:
-            out.append(f"Comments (last {len(d['issue']['comments'])}):")
-            for c in d["issue"]["comments"]:
-                out += ["  " + x for x in card_value(c["author"], c["body"])]
     if d["prs"]:  # "from <head>", never "branch <name>": token-guard reads the first `branch <name>` of a builder prompt
         out.append("Earlier PRs:")
         out += [f"  #{p['number']} {p['kind']} (merged {p['merged']}) from {p['head']}" + (f": left: {p['left']}" if p["left"] else "") for p in d["prs"]]
@@ -1056,38 +984,10 @@ def tracker_url(cfg):
     return f"https://github.com/{cfg['TRACKER_REPO']}/blob/{cfg['TRACKER_BRANCH']}/{urllib.parse.quote(cfg['TRACKER_PATH'])}"
 
 
-def add_issue(cfg, a, title, notes):
-    """ISSUE_IMPORT=1: the queue is the issues of ISSUE_REPO. Open one with the label that imports as Not started; the next sync mirrors it."""
-    labels = [k for k, v in cfg["issue_status"] if v == "Not started"]
-    if not labels:
-        raise Fail(2, "ISSUE_STATUS maps no label to Not started, so a new issue would never become ready work")
-    label = "agent:ready" if "agent:ready" in labels else labels[0]
-    repo, body = cfg["ISSUE_REPO"], notes or "Added with `tracker add`."
-    why = unready_reason(notes)
-    held = [k for k, v in cfg["issue_status"] if v == "Blocked" and k != "*"]
-    if why and held:  # the same rule as a CSV row: a vague issue waits for his answer instead of reaching a builder
-        label = "agent:blocked" if "agent:blocked" in held else held[0]
-        body += f"\n\nNot ready: {why}. Add what done looks like, then relabel it {labels[0]}."
-    cmd = ["issue", "create", "-R", repo, "--title", title, "--body", body] + (["--label", label] if label != "*" else [])
-    if a.dry_run:
-        print(f"dry run: would create an issue in {repo}" + (f" labelled {label}" if label != "*" else "") + f": {title}")
-        print(f"body: {body}")
-        return
-    out = gh_out(*cmd).strip()
-    url = out.splitlines()[-1] if out else ""
-    m = re.search(r"/issues/(\d+)$", url)
-    if not m:
-        raise Fail(2, f"gh issue create printed no issue url: {out[:200]!r}")
-    print(f"added #{m.group(1)}: {title}" + (f" (labelled {label}, not built until answered: {why})" if why and held else "") + f"\n{url}")
-    log("it becomes a tracker row at the next `tracker sync`")
-
-
 def cmd_add(cfg, a):
     title, notes = " ".join(a.title.split()), (a.notes or "").strip()
     if not title:
         raise Fail(2, "tracker add needs a title")
-    if cfg.get("ISSUE_IMPORT") == "1":
-        return add_issue(cfg, a, title, notes)
     if a.dry_run:  # the same row, built on the current file, not written
         t = fetch(cfg)[1]
         tid, rec = add_row(t, title, notes)
@@ -1106,22 +1006,13 @@ def cmd_unblock(cfg, a):
     """His answer to a Blocked row, or a block that no longer holds: back in the queue, whoever held it. A row with a branch becomes a
     leftover, so `next` hands that branch to the next builder first; one without goes back to Not started. --note is kept in the notes column."""
     note = " ".join((a.note or "").split())
-    issue = cfg.get("ISSUE_IMPORT") == "1"
-    if note and issue:  # issue mode has no notes column: the answer goes on the issue, where `tracker show` reads it back
-        t0 = fetch(cfg)[1]
-        r0 = need_row(t0, a.task)
-        if t0.status(r0) == "Blocked" and not t0.get(r0, "Blocker").startswith("issue label "):
-            gh_out("issue", "comment", a.task.lstrip("#"), "-R", cfg["ISSUE_REPO"], "--body", f"Answer {stamp()[:10]}: {note}")
 
     def fn(t):
         rec = need_row(t, a.task)
         st, was = t.status(rec), t.get(rec, "Blocker")
         if st != "Blocked":
             raise Fail(2, f"{a.task} is {st or 'empty'}, not Blocked")
-        if cfg.get("ISSUE_IMPORT") == "1" and was.startswith("issue label "):  # the label is the truth: the next sync would re-block the row
-            raise Fail(2, f"{a.task} is blocked by its issue label: gh issue edit {a.task.lstrip('#')} -R {cfg['ISSUE_REPO']} "
-                          f"--remove-label {was[len('issue label '):]} --add-label agent:ready, then tracker sync")
-        if note and not issue:
+        if note:
             col = notes_col(t, note, "or drop --note")
             old = t.get(rec, col)
             t.set(rec, col, (old + "\n" if old else "") + f"Answer {stamp()[:10]}: {note}")

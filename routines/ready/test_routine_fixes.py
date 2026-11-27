@@ -457,6 +457,16 @@ class VerdictThreeFacts(unittest.TestCase):
         self.assertIn("next --json", open(f"{self.fake}/tracker.log").read())
         self.assertIn("--conf", open(f"{self.fake}/tracker.log").read())
 
+    def test_queue_defaults_to_the_routines_tracker_rows(self):
+        """2026-11-27: no VERDICT_QUEUE counts `tracker next` new + leftover rows, never agent:* issue labels."""
+        write(f"{self.defs}/demo.conf", self.CONF.replace("VERDICT_QUEUE='echo \"READY (0)\"'\n", ""))
+        write(f"{self.fake}/tracker.json", json.dumps({"next": {"kind": "NEW"}, "new": [{"task": "T-1"}, {"task": "T-2"}],
+                                                      "leftover": [{"task": "T-3"}], "changes": [], "blocked": []}))
+        r, sent = self.run_verdict()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("although 3 tasks waiting", sent)
+        self.assertIn(f"--conf {self.defs}/demo.conf", open(f"{self.fake}/tracker.log").read())
+
     def test_idle_group_prints_one_idle_line(self):
         self.conf()
         self.set_service(ok=True, minutes_ago=60 * 40)  # last run is older than the window
