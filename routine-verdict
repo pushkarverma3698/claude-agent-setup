@@ -217,13 +217,15 @@ run_status() { # routine
   # A run that sent its Step 6 report (a line starting "Needs you: <n>") has finished, even when
   # the report's founder items leave it at state=blocked (2026-10-27: a run ended that way).
   # Any message counts, not only the last: on 10-28 a run answered two later wake-ups after its report.
+  # 2026-11-27: runs now end with "Outstanding from your end" and a "Verdict: YES|NO" line (the Stop hook
+  # requires it), not "Needs you: <n>"; every finished run was reported as paused on the usage limit.
   if [ "$v" = "session state=blocked" ]; then
     local id f; id=$(jq -r '.id' <<<"$sess"); p=$(jq -r '.profile' <<<"$sess")
     f=$( set +u; source "$PENV" "$p" >/dev/null 2>&1
          jq -r '.linkScanPath // empty' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id/state.json" 2>/dev/null )
     [ -f "$f" ] && jq -rs 'map(select(.type == "assistant" and (.isSidechain | not))
         | [.message.content[]? | select(.type == "text") | .text] | join("") | select(length > 0)) | .[]' "$f" 2>/dev/null \
-      | grep -qE '^\**Needs you: ?[0-9]+' && v=ok
+      | grep -qE '^\**(Needs you: ?[0-9]+|Verdict: (YES|NO)\b|(Nothing )?[Oo]utstanding from your end)' && v=ok
   fi
   if [ "$v" = ok ]; then RUN_OK=1; else RUN_WHY="$r run not finished: $v"; fi
 }

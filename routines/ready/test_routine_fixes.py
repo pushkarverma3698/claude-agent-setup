@@ -506,6 +506,31 @@ class VerdictThreeFacts(unittest.TestCase):
         _, sent = self.run_verdict()
         self.assertIn("1. Finished: no, paused on the Claude usage limit", sent)
 
+    def blocked_with_report(self, text):
+        self.set_session("blocked")
+        tr = f"{self.fake}/cfg/projects/-w/report.jsonl"
+        write(tr, json.dumps({"type": "assistant", "isSidechain": False, "timestamp": self.iso(30),
+                              "message": {"content": [{"type": "text", "text": text}]}}) + "\n")
+        write(f"{self.fake}/cfg/jobs/abc/state.json", json.dumps({"linkScanPath": tr}))
+
+    def test_blocked_session_that_sent_its_report_finished(self):
+        # 2026-11-27: runs end with "Outstanding from your end" and a Verdict line, not "Needs you: <n>",
+        # and every finished run was reported as paused on the usage limit.
+        for text in ("Needs you: 2", "Merged two fixes.\n\nOutstanding from your end:\n1. Open the PR.\n\nVerdict: YES",
+                     "Nothing outstanding from your end.\n\nVerdict: NO: CI red, checked with gh pr checks 5"):
+            with self.subTest(text=text[:20]):
+                self.conf()
+                self.blocked_with_report(text)
+                _, sent = self.run_verdict()
+                self.assertIn("1. Finished: yes", sent)
+                os.remove(f"{self.fake}/sent.txt")
+
+    def test_blocked_session_without_a_report_is_paused(self):
+        self.conf()
+        self.blocked_with_report("Picking T-12 now; Verdict line comes at the end.")
+        _, sent = self.run_verdict()
+        self.assertIn("1. Finished: no, paused on the Claude usage limit", sent)
+
     def test_unreadable_tracker_is_a_needs_you_item_not_silence(self):
         self.conf("TRACKER_REPO=acme/tracker\n")
         write(f"{self.fake}/tracker.fail", "")
