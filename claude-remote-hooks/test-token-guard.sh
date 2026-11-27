@@ -8,7 +8,8 @@ cat >"$T/defaults.json" <<'JSON'
     "format": "task-contract.md step 7", "branch": "^feat/t(\\d+)-", "builder": "Task API, task T-?(\\d+)\\b"},
   "widgets-co/widgets-api": {"bases": ["beta", "production"], "branch": "^feat/t(\\d+)-", "from": "production",
     "closes": "task"},
-  "widgets-co/widgets-app": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production"}}}
+  "widgets-co/widgets-app": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production"},
+  "solo-co/solo": {"bases": ["beta", "main"], "branch": "^feat/t(\\d+)-", "closes": "task"}}}
 JSON
 export TOKEN_GUARD_DEFAULTS="$T/defaults.json" TOKEN_GUARD_POLICY="$T/no-policy.json"
 seq 1 1000 >"$T/big.txt"; seq 1 20 >"$T/small.txt"; seq 1 20 >"$T/small2.txt"
@@ -88,6 +89,9 @@ x
 ## Not verified\"")" "widgets PR with an inline --body opening on a heading"
 run deny  "$(b "gh pr create -R widgets-co/widgets-api --base beta --title t --body-file oldwidgets.md")" "widgets PR without the three sections refused"
 run allow "$(b "gh pr create -R widgets-co/widgets-api --base production --head beta --title promote --body x")" "widgets promotion PR to production"
+# 2026-11-27: FounderOS promotes beta -> main; only `production` was exempt, so every promotion PR was refused for task sections
+run allow "$(b "gh pr create -R solo-co/solo --base main --head chore/promote-x --title promote --body x")" "promotion PR to main (a later base) needs no task sections"
+run deny  "$(b "gh pr create -R solo-co/solo --base beta --head feat/t5-x --title t --body x")" "a PR to the integration base still needs them"
 run allow "$(b "gh pr create -R someone/other --base main --title t --body x")" "other repos untouched"
 # closes=task (2026-10-30, T-ids since 2026-11-27): a PR that closes T-N comes from feat/t<N>-*, the branch the queue and the claim see
 printf '## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\nCloses T-12\n' >"$T/closes12.md"
