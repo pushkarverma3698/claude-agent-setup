@@ -59,9 +59,10 @@ def repo_of(cmd, cwd):
     return slug(remote_of(cmd, cwd))
 
 
-def head_of(cmd, cwd):
-    """The PR's head branch: `--head`/`-H`, else the branch checked out in the dir cmd cds into (or cwd); "" if unknown."""
-    m = re.search(r"(?<![\w-])(?:--head|-H)[ =]['\"]?([^\s'\"]+)", cmd)
+def head_of(cmd, cwd, args=None):
+    """The PR's head branch: `--head`/`-H` in the gh invocation's own flags (args; default the whole cmd), else the
+    branch checked out in the dir cmd cds into (or cwd); "" if unknown."""
+    m = re.search(r"(?<![\w-])(?:--head|-H)[ =]['\"]?([^\s'\"]+)", cmd if args is None else args)
     if m:
         return m.group(1).split(":")[-1]
     c = re.search(r"\bcd\s+(['\"]?)([^\s;&|'\"]+)\1", cmd)

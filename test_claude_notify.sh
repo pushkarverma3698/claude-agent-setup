@@ -63,4 +63,9 @@ eq "buttons: invalid line skipped -> empty" "$(notify_buttons_json "$T/b2.txt")"
 printf 'X|javascript:alert(1)\n' >"$T/b3.txt"
 eq "buttons: non-http url rejected" "$(notify_buttons_json "$T/b3.txt")" ""
 
+# Options that are not text never reach Telegram (no env file is read before they exit)
+eq "--help prints usage" "$(./claude-notify --help 2>&1 | head -1)" 'claude-notify [--html] [--buttons <file>] "<text>"   (or the text on stdin)'
+eq "-h prints usage" "$(./claude-notify -h 2>&1 | head -1)" 'claude-notify [--html] [--buttons <file>] "<text>"   (or the text on stdin)'
+eq "unknown option: nothing sent" "$(./claude-notify --bogus x 2>&1)" 'claude-notify: unknown option --bogus (nothing sent; see claude-notify --help)'
+
 exit $fail

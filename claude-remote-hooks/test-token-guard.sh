@@ -98,6 +98,10 @@ run deny  "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --bo
 run deny  "$(b "gh pr create -R $OPA --base beta --head feat/t13-login --title t --body-file fixes12.md")" "issue PR from another issue's branch refused"
 run deny  "$(b "gh pr create -R $OPA --base beta --head feat/t120-x --title t --body-file closes12.md")" "t120 branch does not close T-12"
 run deny  "$(b "gh pr create -R $OPA --base beta --title t --body-file closes12.md")" "issue PR with no --head outside a git dir refused"
+# 2026-11-27: `git checkout -B <branch> && gh pr create --base …` read the -B of git as the PR base
+run allow "$(b "git checkout -q -B chore/promote-x origin/main && git push -q -u origin HEAD; gh pr create --draft -R widgets-co/widgets-api --base production --head chore/promote-x --title promote --body x 2>&1|tail -1")" "promotion PR after git checkout -B: base read from gh pr create"
+run deny  "$(b "git checkout -B beta origin/beta && gh pr create -R $OPA --base main --title t --body-file noissue.md")" "a git -B beta does not stand in for the PR base"
+run deny  "$(b "git switch -C x && gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md && git checkout -B feat/t12-x")" "head read from gh pr create, not a later git command"
 run allow "$(b "gh pr create -R $OPA --base beta --head feat/t12-login --title t --body-file closes12.md")" "issue PR from feat/t12-* allowed"
 run allow "$(b "gh pr create -R $OPA --base beta -H feat/t12-login --title t --body-file fixes12.md")" "issue PR via -H allowed"
 run allow "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file noissue.md")" "PR closing no issue keeps any branch"

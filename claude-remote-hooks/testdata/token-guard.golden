@@ -512,6 +512,39 @@
  },
  "rc": 0,
  "stderr": "",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git checkout -q -B chore/promote-x origin/main && git push -q -u origin HEAD; gh pr create --draft -R widgets-co/widgets-api --base production --head chore/promote-x --title promote --body x 2>&1|tail -1\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: PRs in widgets-co/widgets-api target `beta`: add `--base beta`.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git checkout -B beta origin/beta && gh pr create -R widgets-co/widgets-api --base main --title t --body-file noissue.md\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 2,
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api from `fix/login`; a task PR comes from its claimed task branch `feat/t12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api feat/t12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"git switch -C x && gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md && git checkout -B feat/t12-x\"}}",
+ "stdout": ""
+}
+{
+ "args": [],
+ "env": {
+  "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
+  "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
+ },
+ "rc": 0,
+ "stderr": "",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head feat/t12-login --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
