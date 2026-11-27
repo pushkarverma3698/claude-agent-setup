@@ -43,22 +43,9 @@ elif a[0] == "api" and "PUT" in a:
     open(csvp, "wb").write(base64.b64decode(body["content"]))
     print(json.dumps({"content": {"sha": sha(open(csvp, "rb").read())}}))
 elif a[0] == "api" and "/contents/" in " ".join(a):
-    raw = open(csvp, "rb").read()
+    raw = open(D + "/other.csv" if "other.csv" in " ".join(a) else csvp, "rb").read()
     b64 = base64.encodebytes(raw).decode()
     print(json.dumps({"sha": sha(raw), "encoding": "base64", "content": b64}))
-elif a[:2] == ["issue", "create"]:
-    open(D + "/created.json", "a").write(json.dumps(a) + "\n")
-    print("https://github.com/" + a[a.index("-R") + 1] + "/issues/300")
-elif a[:2] == ["issue", "view"]:
-    allis = json.load(open(D + "/issues.json")).get(a[a.index("-R") + 1], [])
-    i = next(i for i in allis if str(i["number"]) == a[2])
-    print(json.dumps({"title": i["title"], "body": i["body"], "comments": i.get("comments", [])}))
-elif a[:2] == ["issue", "comment"]:
-    open(D + "/comments.json", "a").write(json.dumps(a) + "\n")
-elif a[:2] == ["issue", "list"]:
-    repo, state = a[a.index("-R") + 1], a[a.index("--state") + 1]
-    allis = json.load(open(D + "/issues.json")).get(repo, [])
-    print(json.dumps([i for i in allis if state == "all" or i["state"] == state]))
 elif a[0] == "api" and "matching-refs" in " ".join(a):
     prefix = "refs/heads/" + a[-1].split("/heads/", 1)[1]
     refs = json.load(open(D + "/refs.json")) if os.path.exists(D + "/refs.json") else []
@@ -269,6 +256,15 @@ class Behaviour(Sandbox):
         claim = json.loads(readf(os.path.join(sh("git", "rev-parse", "--absolute-git-dir", cwd=wt), "tracker-claim")))
         self.assertEqual((claim["task"], claim["holder"], claim["project"]), ("T-101", got["Holder"], "proj-a"))
         self.assertEqual(self.tracker("next", who="B").stdout.splitlines()[0], "NEXT NEW T-102")
+
+    def test_04a_leftover_resumes_its_branch_from_an_older_branch_format(self):
+        # 2026-11-27: Oplify moved task/issue-N-* to feat/tN-*; an in-review row on the old branch must resume it, not start over
+        self.branch_on_remote("task/issue-101-thing", 9)
+        self.put([row("T-101", status="In review", Holder="x:y:z", Branch="task/issue-101-thing", Updated=ago(9))])
+        r = self.tracker("claim", "T-101")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("--resume acme/app task/issue-101-thing", self.log("cb.log"))
+        self.assertEqual(self.rows()["T-101"]["Branch"], "task/issue-101-thing")
 
     def test_04b_leftover_between_lease_and_claim_hours_resumes(self):
         # 2026-10: a 7h-old leftover was offered by `next`, but claim-branch's 12h CLAIM_HOURS refused the resume
@@ -597,124 +593,54 @@ class Behaviour(Sandbox):
         self.assertEqual((got["Status"], got["PR"], got["Next step"], got["Blocker"]), ("Done", "#12", "", ""))
 
 
-class IssueImport(Sandbox):
-    COLS = HEADER + ["Blocked by"]
+class Dependencies(Sandbox):
+    """What keeps a Not started row out of `next`: a dependency in this file, a `<project>:<id>` row of another project's tracker
+    (2026-11-27: replaces the GitHub-issue blockers of ISSUE_IMPORT), or a BLOCK_COL match."""
 
-    def setUp(self):
-        super().setUp()
-        self.conf_extra = "ISSUE_IMPORT=1\n"
-        self.write_conf()
-
-    def put(self, rows, **kw):
-        super().put(rows, **{"header": self.COLS, **kw})
-
-    def issues(self, repo="acme/app", **by_state):
-        """issues(open=[...], closed=[...]): each item (number, title, labels, body)."""
-        path = os.path.join(self.fake, "issues.json")
-        data = json.loads(readf(path)) if os.path.exists(path) else {}
-        data[repo] = [{"number": n, "title": t, "state": st, "labels": [{"name": x} for x in lb], "body": b}
-                      for st, items in by_state.items() for n, t, lb, b in items]
-        writef(path, json.dumps(data))
-
-    def test_20_new_open_issues_are_added_with_status_from_labels(self):
-        quoted = row("#1", 'Keep "this", exactly')
-        self.put([quoted])
-        self.issues(open=[(1, "Keep", ["agent:ready"], ""), (246, "New ready", ["bug", "agent:ready"], ""), (250, "No label", [], ""),
-                          (251, "Stuck", ["agent:ready", "agent:blocked"], "")])
-        before = readf(os.path.join(self.fake, "tracker.csv")).splitlines(True)[1]
-        r = self.tracker("sync")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(r.stdout.splitlines(), ["#246 added (Not started)", "#251 added (Blocked)"])
-        rows = self.rows()
-        self.assertEqual((rows["#246"]["Title"], rows["#246"]["Status"], rows["#246"]["Holder"], rows["#246"]["Milestone"]), ("New ready", "Not started", "", ""))
-        self.assertNotIn("#250", rows)  # no mapped label: not agent work, not imported
-        self.assertEqual(rows["#251"]["Status"], "Blocked")  # first label in map order wins, not first label on the issue
-        self.assertEqual(rows["#251"]["Blocker"], "issue label agent:blocked")
-        self.assertEqual(readf(os.path.join(self.fake, "tracker.csv")).splitlines(True)[1], before)
-        self.assertEqual(self.log("gh.log").count("-X PUT"), 1)
-        again = self.tracker("sync")
-        self.assertEqual(again.stdout.strip(), "nothing to sync")
-        self.assertEqual(self.log("gh.log").count("-X PUT"), 1)
-
-    def test_21_closed_issue_makes_its_row_done(self):
-        self.put([row("#241"), row("#242", status="Building", Holder="x:y:z", Updated=ago(1)), row("#243", status="Done"), row("#244")])
-        self.issues(open=[(244, "Still open", [], "")], closed=[(241, "a", [], ""), (242, "b", [], ""), (243, "c", [], "")])
-        r = self.tracker("sync")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(sorted(r.stdout.splitlines()), ["#241 Done (issue closed)", "#242 Done (issue closed)"])
-        self.assertEqual([self.rows()[k]["Status"] for k in ("#241", "#242", "#243", "#244")], ["Done", "Done", "Done", "Not started"])
-
-    def test_22_label_status_never_overwrites_a_held_or_active_row(self):
-        self.put([row("#1", status="Building", Holder="x:y:z", Updated=ago(1)), row("#2", status="Not started", Holder="x:y:z"),
-                  row("#3", status="In review"), row("#4", status="Claimed", Holder="x:y:z"), row("#5", status="Not started"),
-                  row("#6", status="Waiting")])
-        self.issues(open=[(n, "t", ["agent:blocked"], "") for n in range(1, 7)])
-        r = self.tracker("sync")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        got = {k: v["Status"] for k, v in self.rows().items()}
-        self.assertEqual(got, {"#1": "Building", "#2": "Not started", "#3": "In review", "#4": "Claimed", "#5": "Blocked", "#6": "Waiting"})
-        self.assertEqual(sorted(r.stdout.splitlines()), ["#5 Not started -> Blocked (label)"])
-
-    def test_23_blockers_split_same_repo_and_cross_repo_closed_dropped(self):
-        self.conf_extra = "ISSUE_IMPORT=1\nISSUE_REPO=acme/app\n"
-        self.write_conf()
-        self.put([row("#12", "Dep"), row("#67", "Needs things", **{"Depends on": "#9", "Blocked by": "acme/api#1"}), row("#68", "Plain")])
-        body = "Intro\n\n**Blocked by:** #12, acme/api#245 and other/lib#3, #13.\nNo ref here: acme/api#999\n"
-        self.issues(open=[(12, "Dep", ["agent:ready"], ""), (67, "Needs things", ["agent:ready"], body), (68, "Plain", ["agent:ready"], "")],
-                    closed=[(13, "done one", [], "")])
-        self.issues("acme/api", open=[(245, "api work", [], "")], closed=[(1, "old", [], "")])
-        self.issues("other/lib", closed=[(3, "gone", [], "")])
-        r = self.tracker("sync")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        got = self.rows()["#67"]
-        self.assertEqual((got["Depends on"], got["Blocked by"]), ("#12", "acme/api#245"))
-        self.assertIn("#67 blocked by acme/api#245", r.stdout)
-        nxt = self.tracker("next").stdout.splitlines()
-        self.assertEqual([l for l in nxt if l.startswith("NEW")], ["NEW #12 | Dep", "NEW #68 | Plain"])
-        self.assertIn("NOT READY #67 | deps not done: #12", nxt)
-
-    def test_24_closed_blockers_are_cleared_so_the_row_is_pickable(self):
-        self.put([row("#67", "Was blocked", **{"Depends on": "#12", "Blocked by": "acme/api#245"}), row("#12", status="Done")])
-        self.issues(open=[(67, "Was blocked", ["agent:ready"], "Blocked by #12 and acme/api#245\n")], closed=[(12, "d", [], "")])
-        self.issues("acme/api", closed=[(245, "d", [], "")])
-        r = self.tracker("sync")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        got = self.rows()["#67"]
-        self.assertEqual((got["Depends on"], got["Blocked by"], got["Status"]), ("", "", "Not started"))
-        self.assertEqual(self.tracker("next").stdout.splitlines()[0], "NEXT NEW #67")
+    def other(self, rows):
+        writef(os.path.join(self.d, "conf", "other.conf"), "TRACKER_REPO=acme/tracker\nTRACKER_PATH=other.csv\nCODE_REPO=acme/api\nWORK_BASE=main\n")
+        writef(os.path.join(self.fake, "other.csv"), render(rows))
 
     def test_25_block_col_match_is_not_pickable_and_says_why(self):
-        self.conf_extra = "ID_RE='#\\d+'\nBLOCK_COL='Blocked by'\nBLOCK_RE='\\S.*'\n"  # no ISSUE_IMPORT: a plain conf
+        self.conf_extra = "ID_RE='#\\d+'\nBLOCK_COL='Blocked by'\nBLOCK_RE='\\S.*'\n"
         self.write_conf()
-        self.put([row("#7", "Waits on api", **{"Blocked by": "acme/api#245"}), row("#8", "Free")])
+        self.put([row("#7", "Waits on api", **{"Blocked by": "acme/api#245"}), row("#8", "Free")], header=HEADER + ["Blocked by"])
         out = self.tracker("next").stdout.splitlines()
         self.assertEqual(out[0], "NEXT NEW #8")
         self.assertIn("NOT READY #7 | blocked by acme/api#245", out)
         self.assertEqual(self.tracker("claim", "#7").returncode, 2)
 
-    def test_27_one_sync_imports_then_applies_merged_closes(self):
-        self.put([row("#1", status="Done")])
-        self.issues(open=[(46, "Fixed on beta", ["agent:ready"], "")])
-        writef(os.path.join(self.fake, "prs.json"), json.dumps([{"number": 178, "headRefName": "task/issue-46-fix", "mergedAt": "2026-10-30T10:00:00Z", "body": "Closes #46\n"}]))
-        r = self.tracker("sync")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.rows()["#46"]["Status"], "Done")
-        self.assertEqual(self.tracker("sync").stdout.strip(), "nothing to sync")
+    def test_26_other_project_dep_waits_until_that_row_is_done(self):
+        self.other([row("T-344", status="In review")])
+        self.put([row("T-5", "Needs the api", **{"Depends on": "other:T-344"}), row("T-344", status="Done")])  # a local T-344 is not the other one
+        out = self.tracker("next").stdout.splitlines()
+        self.assertIn("NOT READY T-5 | deps not done: other:T-344", out)
+        self.other([row("T-344", status="Done")])
+        self.assertEqual(self.tracker("next").stdout.splitlines()[0], "NEXT NEW T-5")
 
-    def test_26_without_issue_import_sync_ignores_issues(self):
-        self.conf_extra = ""
+    def test_27_local_and_other_project_deps_mix(self):
+        self.other([row("T-9", status="Done")])
+        self.put([row("T-1"), row("T-5", **{"Depends on": "T-1, other:T-9"})])
+        self.assertIn("NOT READY T-5 | deps not done: T-1", self.tracker("next").stdout.splitlines())
+
+    def test_28_unreadable_dep_project_fails_closed(self):
+        self.put([row("T-5", **{"Depends on": "nosuch:T-1"}), row("T-6")])
+        r = self.tracker("next")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "NEXT NEW T-6")
+        self.assertIn("NOT READY T-5 | deps not done: nosuch:T-1", r.stdout.splitlines())
+        self.assertIn("dependency project nosuch unreadable", r.stderr)
+
+    def test_29_a_conf_still_on_issue_import_is_refused(self):
+        self.conf_extra = "ISSUE_IMPORT=1\n"
         self.write_conf()
-        self.put([row("T-1")])
-        self.issues(open=[(5, "x", ["agent:ready"], "")])
-        before = readf(os.path.join(self.fake, "tracker.csv"), "rb")
-        r = self.tracker("sync")
-        self.assertEqual((r.returncode, r.stdout.strip()), (0, "nothing to sync"))
-        self.assertEqual(readf(os.path.join(self.fake, "tracker.csv"), "rb"), before)
-        self.assertNotIn("issue list", self.log("gh.log"))
+        r = self.tracker("next")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("ISSUE_IMPORT was removed", r.stderr)
 
 
 class AddTask(Sandbox):
-    """`tracker add`: a CSV row through the same compare-and-swap write, or a GitHub issue when ISSUE_IMPORT=1."""
+    """`tracker add`: a CSV row through the same compare-and-swap write."""
     NOTES = HEADER + ["Notes"]
     LINK = "https://github.com/acme/tracker/blob/main/backlog.csv"
 
@@ -809,61 +735,6 @@ class AddTask(Sandbox):
         self.assertEqual(r.stdout.splitlines()[0], "added T-103: Mine")
         self.assertEqual({k: v["Title"] for k, v in self.rows().items()}, {"T-101": "Thing", "T-102": "Added by someone else", "T-103": "Mine"})
 
-    def issue_conf(self, extra=""):
-        self.conf_extra = "ISSUE_IMPORT=1\n" + extra
-        self.write_conf()
-        self.put([row("#1", status="Done")], header=IssueImport.COLS)
-
-    def test_38_issue_import_opens_a_ready_issue_and_leaves_the_csv_alone(self):
-        self.issue_conf()
-        before = self.csv_bytes()
-        r = self.tracker("add", "Idea", "--notes", "why it matters")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(r.stdout.splitlines(), ["added #300: Idea", "https://github.com/acme/app/issues/300"])
-        self.assertEqual(self.created(), [["issue", "create", "-R", "acme/app", "--title", "Idea", "--body", "why it matters", "--label", "agent:ready"]])
-        self.assertEqual(self.csv_bytes(), before)
-        self.assertNotIn("PUT", self.log("gh.log"))
-        r = self.tracker("add", "No notes")  # nothing says what done looks like: filed, but labelled blocked, not ready
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("(labelled agent:blocked, not built until answered: no acceptance criteria)", r.stdout)
-        body = self.created()[-1][self.created()[-1].index("--body") + 1]
-        self.assertTrue(body.startswith("Added with `tracker add`.\n\nNot ready: no acceptance criteria."), body)
-        self.assertEqual(self.created()[-1][-2:], ["--label", "agent:blocked"])
-
-    def test_39_issue_import_repo_and_label_follow_the_conf(self):
-        self.issue_conf("ISSUE_REPO=acme/other\nISSUE_STATUS='stuck=Blocked,todo=Not started'\n")
-        self.assertEqual(self.tracker("add", "Idea", "--notes", "Done when: it works").returncode, 0)
-        self.assertEqual(self.created()[-1][2:4], ["-R", "acme/other"])
-        self.assertEqual(self.created()[-1][-2:], ["--label", "todo"])
-        self.issue_conf("ISSUE_STATUS='stuck=Blocked,*=Not started'\n")  # a catch-all imports any issue: no label needed
-        self.assertEqual(self.tracker("add", "Idea two", "--notes", "Done when: it works").returncode, 0)
-        self.assertNotIn("--label", self.created()[-1])
-
-    def test_40_issue_import_without_a_ready_label_is_refused(self):
-        self.issue_conf("ISSUE_STATUS=stuck=Blocked\n")
-        r = self.tracker("add", "Idea")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("maps no label to Not started", r.stderr)
-        self.assertEqual(self.created(), [])
-
-    def test_41_issue_import_dry_run_creates_nothing(self):
-        self.issue_conf()
-        before = self.csv_bytes()
-        r = self.tracker("add", "Idea", "--notes", "why", "--dry-run")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(r.stdout.splitlines()[0], "dry run: would create an issue in acme/app labelled agent:ready: Idea")
-        self.assertEqual(self.created(), [])
-        self.assertNotIn("issue create", self.log("gh.log"))
-        self.assertEqual(self.csv_bytes(), before)
-
-    def test_42_the_created_issue_is_imported_by_the_next_sync(self):
-        self.issue_conf()
-        self.assertEqual(self.tracker("add", "Idea").returncode, 0)
-        IssueImport.issues(self, open=[(300, "Idea", ["agent:ready"], "Added with `tracker add`.")])
-        self.assertEqual(self.tracker("sync").stdout.splitlines(), ["#300 added (Not started)"])
-        self.assertEqual(self.rows()["#300"]["Title"], "Idea")
-
-
 class Unblock(Sandbox):
     """`tracker unblock`: his answer to a Blocked row (or a block that no longer holds) puts it back in the queue, whoever holds it.
     2026-11-07: six BH rows sat Blocked on "an earlier session left uncommitted work" after that work was saved, and only a hand edit
@@ -906,16 +777,6 @@ class Unblock(Sandbox):
         self.assertIn("no notes column", r.stderr)
         self.assertEqual(readf(os.path.join(self.fake, "tracker.csv"), "rb"), before)
         self.assertNotIn("-X PUT", self.log("gh.log"))
-
-    def test_53_issue_label_block_points_at_the_label(self):
-        self.conf_extra = "ISSUE_IMPORT=1\n"
-        self.write_conf()
-        self.put([row("#246", status="Blocked", Blocker="issue label agent:blocked")], header=IssueImport.COLS)
-        r = self.tracker("unblock", "#246")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("gh issue edit 246 -R acme/app --remove-label agent:blocked --add-label agent:ready", r.stderr)
-        self.assertNotIn("-X PUT", self.log("gh.log"))
-
 
 def iso_now(minutes=0):
     return (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1015,28 +876,6 @@ class TaskContext(Sandbox):
         self.assertEqual(self.log("gh.log").count("-X PUT"), puts)  # read-only
         d = json.loads(self.tracker("show", "T-101", "--json").stdout)
         self.assertEqual(d["prs"][0]["left"], "the webhook")
-
-
-class IssueCard(IssueImport):
-    def test_64_issue_card_carries_body_and_last_comments(self):
-        self.put([row("#46", title="Fix login")])
-        self.issues(open=[(46, "Fix login", ["agent:ready"], "Login fails on Safari.\nDone when: the e2e login test passes")])
-        data = json.loads(readf(os.path.join(self.fake, "issues.json")))
-        data["acme/app"][0]["comments"] = [{"author": {"login": "pv"}, "body": "use the v2 auth endpoint"}]
-        writef(os.path.join(self.fake, "issues.json"), json.dumps(data))
-        r = self.tracker("show", "#46")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        for want in ("TASK CARD #46 | Fix login", "Issue body:", "  Done when: the e2e login test passes", "Comments (last 1):", "  pv: use the v2 auth endpoint"):
-            self.assertIn(want, r.stdout.splitlines())
-
-    def test_65_unblock_note_in_issue_mode_is_an_issue_comment(self):
-        self.put([row("#47", status="Blocked", Blocker="needs founder: which plan?")])
-        r = self.tracker("unblock", "#47", "--note", "the pro  plan")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        c = [json.loads(l) for l in self.log("comments.json").splitlines()]
-        self.assertEqual(c[0][:5], ["issue", "comment", "47", "-R", "acme/app"])
-        self.assertRegex(c[0][-1], r"^Answer \d{4}-\d\d-\d\d: the pro plan$")
-        self.assertEqual(self.rows()["#47"]["Status"], "Not started")
 
 
 if __name__ == "__main__":

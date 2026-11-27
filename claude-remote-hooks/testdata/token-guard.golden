@@ -467,7 +467,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api from `fix/login`; a task PR comes from its claimed task branch `feat/t12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api feat/t12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
@@ -478,8 +478,8 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-13-login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-13-login --title t --body-file fixes12.md\"}}",
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api from `feat/t13-login`; a task PR comes from its claimed task branch `feat/t12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api feat/t12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head feat/t13-login --title t --body-file fixes12.md\"}}",
  "stdout": ""
 }
 {
@@ -489,8 +489,8 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `task/issue-120-x`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-120-x --title t --body-file closes12.md\"}}",
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api from `feat/t120-x`; a task PR comes from its claimed task branch `feat/t12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api feat/t12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head feat/t120-x --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
 {
@@ -500,7 +500,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api but its head branch is unknown: add `--head task/issue-12-<slug>`.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api but its head branch is unknown: add `--head feat/t12-<slug>`.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
@@ -512,7 +512,7 @@
  },
  "rc": 0,
  "stderr": "",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head task/issue-12-login --title t --body-file closes12.md\"}}",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head feat/t12-login --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
 {
@@ -523,7 +523,7 @@
  },
  "rc": 0,
  "stderr": "",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta -H task/issue-12-login --title t --body-file fixes12.md\"}}",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta -H feat/t12-login --title t --body-file fixes12.md\"}}",
  "stdout": ""
 }
 {
@@ -566,7 +566,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api from `fix/login`; a task PR comes from its claimed task branch `feat/t12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api feat/t12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"cd <T>/opfix && gh pr create -R widgets-co/widgets-api --base beta --title t --body-file <T>/closes12.md\"}}",
  "stdout": ""
 }
@@ -577,7 +577,7 @@
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: this PR closes #12 in widgets-co/widgets-api from `fix/login`; an issue PR comes from its claimed task branch `task/issue-12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api task/issue-12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
+ "stderr": "BLOCKED by token-guard: this PR closes T-12 in widgets-co/widgets-api from `fix/login`; a task PR comes from its claimed task branch `feat/t12-<slug>` (the repo task file), or the nightly queue rebuilds it. Claim it with `claim-branch widgets-co/widgets-api feat/t12-<slug> production` (exit 3: another session holds it), push there, then open the PR.\n",
  "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"<T>\",\"tool_input\":{\"command\":\"gh pr create -R widgets-co/widgets-api --base beta --head fix/login --title t --body-file closes12.md\"}}",
  "stdout": ""
 }
@@ -2477,53 +2477,53 @@
 {
  "args": [],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 0,
  "stderr": "",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login claim abc1234, gate: pnpm test.\"}}",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch feat/t42-login claim abc1234, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
  "args": [],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login, gate: pnpm test.\"}}",
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch feat/t42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api feat/t42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch feat/t42-login, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
  "args": [],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: branch task/issue-7-other is not task 42's. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-7-other claim abc1234, gate: pnpm test.\"}}",
+ "stderr": "BLOCKED by token-guard: branch feat/t7-other is not task 42's. Claim it first: new `claim-branch widgets-co/widgets-api feat/t42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch feat/t7-other claim abc1234, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
  "args": [],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch feat/t42-login claim abc1234, gate: pnpm test.\"}}",
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch feat/t42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api feat/t42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch task/issue-42-login claim abc1234, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
@@ -2536,7 +2536,7 @@
  },
  "rc": 0,
  "stderr": "",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, issue #42: summarise it\"}}",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, T-42: summarise it\"}}",
  "stdout": ""
 }
 {
@@ -2574,14 +2574,14 @@
   "--pr-only"
  ],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 0,
  "stderr": "",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login claim abc1234, gate: pnpm test.\"}}",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch feat/t42-login claim abc1234, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
@@ -2589,14 +2589,14 @@
   "--pr-only"
  ],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-42-login, gate: pnpm test.\"}}",
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch feat/t42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api feat/t42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch feat/t42-login, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
@@ -2604,14 +2604,14 @@
   "--pr-only"
  ],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: branch task/issue-7-other is not task 42's. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch task/issue-7-other claim abc1234, gate: pnpm test.\"}}",
+ "stderr": "BLOCKED by token-guard: branch feat/t7-other is not task 42's. Claim it first: new `claim-branch widgets-co/widgets-api feat/t42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch feat/t7-other claim abc1234, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
@@ -2619,14 +2619,14 @@
   "--pr-only"
  ],
  "env": {
-  "FAKE_CMP": "identical chore(claim): reserve task/issue-42-login for one session",
+  "FAKE_CMP": "identical chore(claim): reserve feat/t42-login for one session",
   "FAKE_TRACKER_LOG": "<T>/tracker.calls",
   "TOKEN_GUARD_DEFAULTS": "<T>/defaults.json",
   "TOKEN_GUARD_POLICY": "<T>/no-policy.json"
  },
  "rc": 2,
- "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch task/issue-42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api task/issue-42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#42, new, branch feat/t42-login claim abc1234, gate: pnpm test.\"}}",
+ "stderr": "BLOCKED by token-guard: a builder for widgets-co/widgets-api task 42 needs `branch feat/t42-<slug> claim <sha>` in its prompt. Claim it first: new `claim-branch widgets-co/widgets-api feat/t42-<slug> production`, leftover `claim-branch --resume widgets-co/widgets-api <branch>`. Exit 0 prints the claim sha: put `branch <branch> claim <sha>` in the prompt. Exit 3: another session holds the task, do not start a builder for it.\n",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, task widgets-co/widgets-api#T-42, new, branch task/issue-42-login claim abc1234, gate: pnpm test.\"}}",
  "stdout": ""
 }
 {
@@ -2641,7 +2641,7 @@
  },
  "rc": 0,
  "stderr": "",
- "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, issue #42: summarise it\"}}",
+ "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"cwd\":\"<T>\",\"tool_input\":{\"description\":\"b\",\"prompt\":\"Repo widgets-co/widgets-api, T-42: summarise it\"}}",
  "stdout": ""
 }
 {

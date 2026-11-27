@@ -39,13 +39,15 @@
 #      (re-run is safe) unless --allow-unprotected
 #   5. clone in /home/claude-agent/work/<repo> on the VPS
 #   6. `tracker migrate`: the agent columns are added to the CSV (checked against a draft conf before anything is written)
-#   7. claude-routines/<name>.{conf,md} here (routine keys + tracker keys in the one conf), /home/claude-agent/agent-jobs/<name>.md
-#      on the VPS from routine-job-template.md (keeps definition-of-done.md and the routine/review status)
-#   8. setup-claude-routines (timers, verdict group, routine-policy --install), then the timers, a dry-run verdict
+#   7. claude-routines/<name>.{conf,md} here (routine keys + tracker keys in the one conf; the .md prompt loads the skill) and
+#      the job as the skill routines/skills/<name>-run/SKILL.md next to it, from routine-job-template.md (2026-11-27: was
+#      a VPS-only file in agent-jobs; skills are versioned in the overlay and reach the VPS through sync-agent-rules)
+#   8. sync-agent-rules (the skill reaches /opt/agent-rules/skills-routines; checked there), setup-claude-routines
+#      (timers, verdict group, routine-policy --install), then the timers, a dry-run verdict
 #      for the group; then the laptop and VPS guard policy must list the repo (it stops if not), and `tracker next`
 #      as the last self-check. It ends with the steps left for you (the job contract, the tracker rows).
-# --remove deletes the two definition files, re-runs setup-claude-routines (it disables and removes both
-# timers) and renames the VPS job file to <name>.md.removed-<date>. The clone and protection stay.
+# --remove deletes the two definition files and the skill, re-runs sync-agent-rules and setup-claude-routines (it
+# disables and removes both timers). The clone and protection stay.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -54,10 +56,11 @@ need_host
 DEFS="${ROUTINE_CONF_DIR:-${AGENT_OVERLAY_DIR:+$AGENT_OVERLAY_DIR/claude-routines}}"
 [ -d "$DEFS" ] || { echo "routine-new: set AGENT_OVERLAY_DIR or ROUTINE_CONF_DIR" >&2; exit 64; }
 TEMPLATE="$HERE/routine-job-template.md"
+SKILLS="${ROUTINE_SKILLS_DIR:-$(dirname "$DEFS")/routines/skills}"   # the overlay's routine skills, synced by sync-agent-rules
+SYNC="${SYNC_AGENT_RULES:-$(dirname "$DEFS")/sync-agent-rules}"
 SCHEDULER="$HERE/routines/bin/routine-schedule"
 TRACKER="${TRACKER_BIN:-$HERE/routines/bin/tracker}"
 HOST=$AGENT_RULES_HOST
-JOBS=/home/claude-agent/agent-jobs
 
 die() { echo "routine-new: $*" >&2; exit 1; }
 # --dry-run helpers: `would` prints an action a real run takes; `stop` dies in a real run and, in a dry run, records
@@ -83,8 +86,11 @@ if [ "${1:-}" = --remove ]; then
   [ -f "$DEFS/$name.conf" ] || die "no routine $name in ${DEFS/#$HOME/~}"
   vps "pgrep -u claude-agent -af '[r]outine: $name( |\$)'" && die "a $name run is live; remove it after the run ends"
   rm -f "$DEFS/$name.conf" "$DEFS/$name.md"; echo "removed ${DEFS/#$HOME/~}/$name.{conf,md}"
+  if [ -f "$SKILLS/$name-run/SKILL.md" ]; then
+    rm -f "$SKILLS/$name-run/SKILL.md"; rmdir "$SKILLS/$name-run" 2>/dev/null || true; echo "removed the $name-run skill"
+  fi
+  if [ -x "$SYNC" ]; then "$SYNC"; else echo "routine-new: no sync-agent-rules at $SYNC; run it to drop the skill from the VPS" >&2; fi
   "$HERE/setup-claude-routines"
-  vps "sudo -n -u claude-agent -H bash -c '[ -e $JOBS/$name.md ] && mv $JOBS/$name.md $JOBS/$name.md.removed-\$(date +%Y%m%d) && echo renamed $JOBS/$name.md to $name.md.removed-\$(date +%Y%m%d) || true'"
   show_state "$name"
   exit 0
 fi
@@ -149,7 +155,7 @@ done
 while IFS= read -r l; do
   vps "systemd-analyze calendar '$l' >/dev/null" </dev/null || stop "systemd on the VPS does not accept the schedule line '$l'"
 done <<<"$oncal"
-vps "sudo -n test ! -e $JOBS/$name.md" || stop "$JOBS/$name.md already exists on the VPS"
+[ ! -e "$SKILLS/$name-run" ] || stop "skill ${SKILLS/#$HOME/~}/$name-run already exists; pick --name"
 echo "routine $name: $repo, integration branch $base, tracker $trepo/$tpath, runs: $(tr '\n' ';' <<<"$oncal" | sed 's/;$//; s/;/; /g'), verdict $vat UTC, accounts $profile"
 
 # ---- 1. access ----------------------------------------------------------------------------------------
@@ -287,7 +293,7 @@ fi
 # ---- 6. the conf, and the tracker's agent columns -----------------------------------------------------------
 if [ -n "$boot" ]; then boot_line="\`$boot\` (the verdict requires it)"; else boot_line="none yet: do Step 0"; fi
 conf=$(
-  echo "# Routine for $repo, written by routine-new on $(date +%F). Job steps: $JOBS/$name.md."
+  echo "# Routine for $repo, written by routine-new on $(date +%F). Job steps: the $name-run skill."
   echo "# One file per project: the routine keys below are read by claude-routine, the tracker keys by routines/bin/tracker."
   echo "PROFILE=$profile"
   echo "REPO=$dir                   # ~claude-agent/work/<REPO>"
@@ -332,28 +338,27 @@ else
   echo "6. tracker migrate: ${mout:-agent columns present}"
 fi
 
-# ---- 7. definition files and job file -------------------------------------------------------------------
+# ---- 7. definition files and the job skill ---------------------------------------------------------------
 job=$(cat "$TEMPLATE")
 job=${job//\{\{NAME\}\}/$name}; job=${job//\{\{REPO\}\}/$repo}; job=${job//\{\{DIR\}\}/$dir}
 job=${job//\{\{BASE\}\}/$base}; job=${job//\{\{PROD\}\}/$prod}; job=${job//\{\{BOOT_LINE\}\}/$boot_line}
 job=${job//\{\{DATE\}\}/$(date +%F)}
 ! grep -q '{{' <<<"$job" || die "template has an unfilled placeholder: $(grep -o '{{[A-Z_]*}}' <<<"$job" | head -1)"
 if [ $dry = 1 ]; then
-  would "write $HOST:$JOBS/$name.md ($(wc -l <<<"$job" | tr -d ' ') lines from routine-job-template.md)"
+  would "write ${SKILLS/#$HOME/~}/$name-run/SKILL.md ($(wc -l <<<"$job" | tr -d ' ') lines from routine-job-template.md)"
   would "write ${DEFS/#$HOME/~}/$name.conf (above) and ${DEFS/#$HOME/~}/$name.md (the one-line run prompt)"
 else
-  vps "sudo -n -u claude-agent -H bash -c 'pgrep -u claude-agent -af \"[r]outine: $name( |\$)\" && exit 3; test ! -e $JOBS/$name.md || exit 4; umask 022; cat >$JOBS/$name.md'" <<<"$job" \
-    || die "did not write $JOBS/$name.md (exit $?: 3 = a run is live, 4 = it exists)"
-  echo "7. wrote $HOST:$JOBS/$name.md"
+  mkdir -p "$SKILLS/$name-run"; printf '%s\n' "$job" >"$SKILLS/$name-run/SKILL.md"
+  echo "7. wrote ${SKILLS/#$HOME/~}/$name-run/SKILL.md"
   cp "$draft" "$DEFS/$name.conf"
-  echo "Routine run for $repo. Read $JOBS/$name.md in full and follow it exactly, start to finish. Work autonomously; nobody is awake." >"$DEFS/$name.md"
+  echo "Routine run for $repo. Load the \`$name-run\` skill (Skill tool) and follow it exactly, start to finish. Work autonomously; nobody is watching." >"$DEFS/$name.md"
   echo "   wrote ${DEFS/#$HOME/~}/$name.{conf,md}"
 fi
 
 # ---- 8. deploy, guard policy, self-check ----------------------------------------------------------------
 LAPTOP_POLICY=$HOME/.claude/hooks/routine-policy.json VPS_POLICY=/opt/agent-rules/hooks/routine-policy.json
 if [ $dry = 1 ]; then
-  if [ $deploy = 1 ]; then would "run setup-claude-routines (timers claude-routine@$name and routine-verdict@$name, routine-policy --install)"
+  if [ $deploy = 1 ]; then would "run sync-agent-rules (the $name-run skill to $HOST), then setup-claude-routines (timers claude-routine@$name and routine-verdict@$name, routine-policy --install)"
   else would "run routine-policy --install (--no-deploy: no timers)"; fi
   would "check $LAPTOP_POLICY and $HOST:$VPS_POLICY list $repo, then run tracker next --project $name"
 else
@@ -361,6 +366,11 @@ else
     echo "8. --no-deploy: timers not armed (run setup-claude-routines for that); installing the guard policy"
     AGENT_RULES_HOST="$HOST" ROUTINE_CONF_DIR="$DEFS" "$HERE/routine-policy" --install || die "routine-policy --install failed: the repo is NOT guarded"
   else
+    [ -x "$SYNC" ] || die "no sync-agent-rules at $SYNC (set SYNC_AGENT_RULES): the routine would start without its skill"
+    "$SYNC" || die "sync-agent-rules failed: the $name-run skill is not on $HOST"
+    vps "test -f /opt/agent-rules/skills-routines/$name-run/SKILL.md" </dev/null \
+      || die "$HOST:/opt/agent-rules/skills-routines/$name-run/SKILL.md is missing after sync-agent-rules"
+    echo "8. the $name-run skill is on $HOST"
     "$HERE/setup-claude-routines"
     show_state "$name"
   fi
@@ -377,7 +387,7 @@ else
 fi
 
 # ---- what is left for the founder -------------------------------------------------------------------------
-todo=("Write the job contract: the local gate (install + test commands CI runs), services and PR body in $HOST:$JOBS/$name.md: ssh -t $HOST 'sudo -u claude-agent -H \${EDITOR:-nano} $JOBS/$name.md'"
+todo=("Write the job contract: the local gate (install + test commands CI runs), services and PR body in ${SKILLS/#$HOME/~}/$name-run/SKILL.md, then run ${SYNC/#$HOME/~}"
       "Fill the tracker: replace the example row T-1 with real tasks (ids must be T-<number>): https://github.com/$trepo/edit/$tbranch/$tpath"
       ${todo[@]+"${todo[@]}"})
 [ $paused = 0 ] || todo+=("Arm the timer: delete PAUSED=1 from ${DEFS/#$HOME/~}/$name.conf, then run $HERE/setup-claude-routines")

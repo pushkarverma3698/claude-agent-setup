@@ -6,8 +6,8 @@ cat >"$T/defaults.json" <<'JSON'
 {"repos": {
   "acme/task-api": {"bases": ["chore/integration"], "status": "local-ci", "runner": "ci-run", "task": "T-NNN",
     "format": "task-contract.md step 7", "branch": "^feat/t(\\d+)-", "builder": "Task API, task T-?(\\d+)\\b"},
-  "widgets-co/widgets-api": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production",
-    "closes": "issue"},
+  "widgets-co/widgets-api": {"bases": ["beta", "production"], "branch": "^feat/t(\\d+)-", "from": "production",
+    "closes": "task"},
   "widgets-co/widgets-app": {"bases": ["beta", "production"], "branch": "^task/issue-(\\d+)-", "from": "production"}}}
 JSON
 export TOKEN_GUARD_DEFAULTS="$T/defaults.json" TOKEN_GUARD_POLICY="$T/no-policy.json"
@@ -89,24 +89,24 @@ x
 run deny  "$(b "gh pr create -R widgets-co/widgets-api --base beta --title t --body-file oldwidgets.md")" "widgets PR without the three sections refused"
 run allow "$(b "gh pr create -R widgets-co/widgets-api --base production --head beta --title promote --body x")" "widgets promotion PR to production"
 run allow "$(b "gh pr create -R someone/other --base main --title t --body x")" "other repos untouched"
-# closes=issue (2026-10-30): a PR that closes issue #N comes from task/issue-<N>-*, the branch the queue and the claim see
-printf '## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\nCloses #12\n' >"$T/closes12.md"
-printf 'fixes  #12\n## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\n' >"$T/fixes12.md"
+# closes=task (2026-10-30, T-ids since 2026-11-27): a PR that closes T-N comes from feat/t<N>-*, the branch the queue and the claim see
+printf '## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\nCloses T-12\n' >"$T/closes12.md"
+printf 'fixes  T-12\n## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\n' >"$T/fixes12.md"
 printf '## What changed\nx\n## How it was verified\ny\n## Not verified\nnone\n' >"$T/noissue.md"
 OPA=widgets-co/widgets-api
 run deny  "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file closes12.md")" "issue PR from an off-contract branch refused"
-run deny  "$(b "gh pr create -R $OPA --base beta --head task/issue-13-login --title t --body-file fixes12.md")" "issue PR from another issue's branch refused"
-run deny  "$(b "gh pr create -R $OPA --base beta --head task/issue-120-x --title t --body-file closes12.md")" "issue-120 branch does not close #12"
+run deny  "$(b "gh pr create -R $OPA --base beta --head feat/t13-login --title t --body-file fixes12.md")" "issue PR from another issue's branch refused"
+run deny  "$(b "gh pr create -R $OPA --base beta --head feat/t120-x --title t --body-file closes12.md")" "t120 branch does not close T-12"
 run deny  "$(b "gh pr create -R $OPA --base beta --title t --body-file closes12.md")" "issue PR with no --head outside a git dir refused"
-run allow "$(b "gh pr create -R $OPA --base beta --head task/issue-12-login --title t --body-file closes12.md")" "issue PR from task/issue-12-* allowed"
-run allow "$(b "gh pr create -R $OPA --base beta -H task/issue-12-login --title t --body-file fixes12.md")" "issue PR via -H allowed"
+run allow "$(b "gh pr create -R $OPA --base beta --head feat/t12-login --title t --body-file closes12.md")" "issue PR from feat/t12-* allowed"
+run allow "$(b "gh pr create -R $OPA --base beta -H feat/t12-login --title t --body-file fixes12.md")" "issue PR via -H allowed"
 run allow "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file noissue.md")" "PR closing no issue keeps any branch"
 run allow "$(b "gh pr create -R widgets-co/widgets-app --base beta --head fix/login --title t --body-file closes12.md")" "repo without closes= untouched"
-git init -q -b task/issue-12-login "$T/op12" && git init -q -b fix/login "$T/opfix"
-run allow "$(b "cd $T/op12 && gh pr create -R $OPA --base beta --title t --body-file $T/closes12.md")" "issue PR with no --head from a task/issue-12-* checkout allowed"
+git init -q -b feat/t12-login "$T/op12" && git init -q -b fix/login "$T/opfix"
+run allow "$(b "cd $T/op12 && gh pr create -R $OPA --base beta --title t --body-file $T/closes12.md")" "issue PR with no --head from a feat/t12-* checkout allowed"
 run deny  "$(b "cd $T/opfix && gh pr create -R $OPA --base beta --title t --body-file $T/closes12.md")" "issue PR with no --head from a fix/* checkout refused"
 o=$(printf '%s' "$(b "gh pr create -R $OPA --base beta --head fix/login --title t --body-file closes12.md")" | python3 "$H" 2>&1 >/dev/null)
-grep -q 'claim-branch widgets-co/widgets-api task/issue-12-<slug> production' <<<"$o" && echo "ok   msg   issue refusal names the claim command" || { echo "FAIL msg   issue refusal: $o"; fail=1; }
+grep -q 'claim-branch widgets-co/widgets-api feat/t12-<slug> production' <<<"$o" && echo "ok   msg   issue refusal names the claim command" || { echo "FAIL msg   issue refusal: $o"; fail=1; }
 run wrap  "$(b "gh pr merge 84 -R $BH --squash --delete-branch")" "merge gets a live base check"
 run allow "$(b "gh pr view 84 -R $BH")" "pr view untouched"
 run deny  "$(b "gh api repos/$BH/statuses/abc -f state=success -f context=local-ci")" "agents cannot post local-ci themselves"
@@ -303,16 +303,16 @@ for m in "" --pr-only; do
 done
 # the generic marker `task <owner/repo>#<id>` (2026-10-30): any claimed repo in routine-policy, widgets included
 OPI="widgets-co/widgets-api"
-CLO="chore(claim): reserve task/issue-42-login for one session"
-PO="Repo $OPI, task $OPI#42, new, branch task/issue-42-login claim abc1234, gate: pnpm test."
+CLO="chore(claim): reserve feat/t42-login for one session"
+PO="Repo $OPI, task $OPI#T-42, new, branch feat/t42-login claim abc1234, gate: pnpm test."
 for m in "" --pr-only; do
   d allow "identical $CL" "task acme/task-api#T-205, new, branch feat/t205-fulfil claim abc1234." "task-repo marker form checked like the old phrase" $m
   d deny  "identical $CL" "task acme/task-api#205, new. Read task-contract.md" "task-repo marker without claim refused" $m
   d allow "identical $CLO" "$PO" "widgets builder on its claimed branch" $m
   d deny  "identical $CLO" "${PO/ claim abc1234/}" "widgets builder without claim sha refused" $m
-  d deny  "identical $CLO" "${PO/issue-42-login/issue-7-other}" "widgets branch of another issue refused" $m
-  d deny  "identical $CLO" "${PO/branch task\/issue-42-login/branch feat/t42-login}" "branch outside the repo's pattern refused" $m
-  d allow "" "Repo $OPI, issue #42: summarise it" "widgets prompt without the marker untouched" $m
+  d deny  "identical $CLO" "${PO/t42-login/t7-other}" "widgets branch of another task refused" $m
+  d deny  "identical $CLO" "${PO/branch feat\/t42-login/branch task/issue-42-login}" "branch outside the repo's pattern refused" $m
+  d allow "" "Repo $OPI, T-42: summarise it" "widgets prompt without the marker untouched" $m
 done
 # routine-policy.json next to the hook (TOKEN_GUARD_POLICY in tests): it adds repos; a broken file keeps the defaults
 printf '%s' '{"repos":{"acme/widgets":{"bases":["main"],"branch":"^task/w(\\d+)-"}}}' > "$T/pol.json"

@@ -9,7 +9,7 @@ The tracker (a CSV in its own repo, driven by the `tracker` tool) is the only re
 
 1. `tracker next`. Output starts `NEXT LEFTOVER|NEW T-12`, or `NEXT NONE` (nothing to do: say so and stop).
    Leftovers (stale work nobody holds) always come before new tasks. HELD rows are someone else's; skip them.
-2. `tracker claim T-12`. It makes the branch and worktree and prints `CLAIMED T-12 branch <b> claim <sha> worktree=… holder=…`, then the task card: every filled column (acceptance criteria, endpoints, tables, rules, dependencies), Next step and Blocker, the issue body and its last comments, and earlier merged PRs with what they left. Work only in that worktree.
+2. `tracker claim T-12`. It makes the branch and worktree and prints `CLAIMED T-12 branch <b> claim <sha> worktree=… holder=…`, then the task card: every filled column (acceptance criteria, endpoints, tables, rules, dependencies), Next step and Blocker, and earlier merged PRs with what they left. Work only in that worktree.
    - Build from the card, not from the title. `tracker show T-12` prints it again at any time (read-only; `--json` for scripts).
    - The card is the spec. If it does not say what done looks like, block the task (step 5) instead of guessing.
    - exit 3: someone holds it. Run `tracker next` again and take what it names.
@@ -24,7 +24,7 @@ The tracker (a CSV in its own repo, driven by the `tracker` tool) is the only re
 
 Exit 5 from any command, or a push refused with "taken over": another session took the row. Stop, push nothing, report it.
 
-If the project imports GitHub issues (`ISSUE_IMPORT=1`), ids look like `#246` and `tracker sync` refreshes the rows from the issues first; a NOT READY row names the open blocker. Close the issue (`Closes #246` in the PR) rather than editing the row.
+The tracker is the only queue: never take work from GitHub issues or `agent:*` labels. A row that waits on another project names it in `Depends on` as `<project>:<id>` (`oplify-api:T-344`). The PR body says `Closes T-12`.
 
 Examples use `T-12` and PR 34; the real ids come from `tracker next`.
 
@@ -44,7 +44,7 @@ Every card has:
 Before filing:
 - Measure the funnel stage by stage before blaming one stage. Fix the stage that loses the most, and file it first.
 - Search for what already exists: the repo, open PRs, the brain, official APIs and their terms, and how others solve it. Put what you found and rejected on the card, with the reason.
-- One problem per card. Split an audit into cards and add one ordering card or issue that lists them.
+- One problem per card. Split an audit into cards and add one ordering card that lists them.
 - A public repo gets no personal data, no company or customer names and no private URLs. Describe the case ("an employer on platform X") and keep the specifics in the private tracker or the brain.
 
 Then re-read each card as the cold builder: could you start without asking anything? If not, add what is missing.
@@ -55,15 +55,15 @@ Triggers: "idea: ...", "add task ...", "later: ...", "remember to build ...". Qu
 
 1. Pick the project from his words (BH is `bh-morning`; oplify has an api and an app conf). List them with `ls /etc/claude-routines/*.conf`. Ask one question only if two fit or none does, then wait.
 2. `tracker add --conf /etc/claude-routines/<name>.conf "<title>" --notes "<the rest of what he said>"`. The title is his words in under 80 characters; drop `--notes` if there is nothing more.
-3. Reply in one line with the id and the link it printed: `Added T-404: <title> <link>`. For an oplify issue it prints `#123` and the issue link; the row appears at the next `tracker sync`.
+3. Reply in one line with the id and the link it printed: `Added T-404: <title> <link>`.
 
-A task with nothing about what done looks like is filed Blocked (an issue gets the blocked label), and so is one whose notes wait on a decision. The reply then says `(Blocked, not built until answered: <reason>)`: pass that on so he answers it. Exit 2 "no notes column": run it again with everything in the title. Never edit the CSV or open the issue by hand. Add `--dry-run` to see what would be written.
+A task with nothing about what done looks like is filed Blocked, and so is one whose notes wait on a decision. The reply then says `(Blocked, not built until answered: <reason>)`: pass that on so he answers it. Exit 2 "no notes column": run it again with everything in the title. Never edit the CSV by hand. Add `--dry-run` to see what would be written.
 
 ## Answering a blocked task
 
 Triggers: he replies to a "Needs you" item with a task id and an answer ("T-160: take it over", "T-303: park it", "T-143: restore boosts and credits").
 
-1. `tracker unblock --conf /etc/claude-routines/<name>.conf T-160 --note "<his answer>"`. The answer lands in the notes column as `Answer <date>: …` (on an issue tracker, as an issue comment) for the next builder. A row with a branch becomes a leftover, so the next build resumes that branch first.
+1. `tracker unblock --conf /etc/claude-routines/<name>.conf T-160 --note "<his answer>"`. The answer lands in the notes column as `Answer <date>: …` for the next builder. A row with a branch becomes a leftover, so the next build resumes that branch first.
 2. Reply in one line with what it printed.
 
-A block whose reason is plainly gone (the work it waited on is merged or saved) may be unblocked without asking; say so in the reply. Exit 2 "blocked by its issue label": run the `gh issue edit` it prints.
+A block whose reason is plainly gone (the work it waited on is merged or saved) may be unblocked without asking; say so in the reply.

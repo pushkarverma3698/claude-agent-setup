@@ -1,10 +1,14 @@
+---
+name: {{NAME}}-run
+description: Lead steps of the scheduled {{NAME}} routine for {{REPO}}: work the tracker, build, review, merge, report. Load it when the routine starts you, or when the founder asks to run {{NAME}} by hand.
+---
 # {{NAME}} — scheduled session ({{REPO}})
 
-Written by routine-new on {{DATE}}; edit this file on the VPS (never while a `routine: {{NAME}}` run is live). Nobody is awake; work start to finish.
+Written by routine-new on {{DATE}}; edit it in the overlay (`routines/skills/{{NAME}}-run/SKILL.md`), then run sync-agent-rules. The tracker is the only queue: no GitHub issues or labels. Nobody is awake; work start to finish.
 Work the tracker (skill `work-the-tracker`): every command is `tracker --project {{NAME}} <command>`. The tool refuses a claim over a held row or a leftover; follow what it prints.
 Rules for shell, evidence, DoD and CI-watch: /home/claude-agent/agent-jobs/definition-of-done.md and the `{{NAME}}` items in founder-actions.md.
 You are the lead: plan, review, decide, merge. Up to 3 Sonnet builders at once, one per claimed task; pass `model` on every Agent call (builders, fixers `"sonnet"`; CI-log summaries `"haiku"`).
-Builder prompt: "Repo {{REPO}}, task T-<N>, CLAIMED line: <paste it>. Build it in that worktree following the Task file in /home/claude-agent/agent-jobs/{{NAME}}.md and definition-of-done.md; reply in under 15 lines."
+Builder prompt: "Repo {{REPO}}, task T-<N>, CLAIMED line: <paste it>. Build it in that worktree following the `## Task file` of the `{{NAME}}-run` skill and definition-of-done.md; reply in under 15 lines."
 Review each PR before merging (DoD 1–3, 5, 6; the new test must fail without the fix). On PASS: `gh api repos/{{REPO}}/statuses/<sha> -f state=success -f context=routine/review -f description="reviewed PASS"`, merge, then `tracker --project {{NAME}} done T-N --pr <n>`.
 Max 5 tasks a run; start nothing new on a usage-limit warning. Nothing to do: one query, one-line report.
 Report (last step): `save_bug` per root-caused bug (project "{{DIR}}"), then one message with `claude-notify "<report>" || true` (line breaks as `\n`) and print it.
