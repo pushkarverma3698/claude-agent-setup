@@ -87,6 +87,9 @@ while [ $# -gt 0 ]; do
     --buttons) buttons_file=${2:-}; shift 2 2>/dev/null || shift ;;
     --escape) shift; notify_escape "${*:-$(cat)}"; exit 0 ;;
     --) shift; break ;;
+    # A session probing usage sent "--help" to the founder's Telegram (2026-11-27): print the header, send nothing.
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --*) echo "claude-notify: unknown option $1 (nothing sent; see claude-notify --help)" >&2; exit 0 ;;
     *) break ;;
   esac
 done
