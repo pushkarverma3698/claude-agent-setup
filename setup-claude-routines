@@ -154,10 +154,11 @@ echo "== routines: scripts, units and job files (real files in this folder and t
 #   routines/jobs/*.md               -> /home/claude-agent/agent-jobs (claude-agent owns them; founder-actions.md
 #                                       lives only there: it is runtime state, never copied)
 #   routines/ready/*                 -> /home/claude-agent/work (ready-set scripts; test_*.py stay in the repo)
-#   skills/<name>/                   -> <each profile>/skills/<name> (main ~/.claude, alt ~/.claude-alt, alt2 ~/.claude-alt2)
+#   skills: not here. Every profile's skills folder links to /opt/agent-rules/skills-remote, which sync-agent-rules
+#   fills (this repo's skills/ via ~/.claude/skills, the overlay's routines/skills/ via skills-routines/)
 #   routines/husky/init.sh           -> /home/claude-agent/.config/husky/init.sh (env for repos' pre-push hooks)
 stage=$(ssh "$HOST" 'mktemp -d')
-( cd "$HERE" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - claude-notify routine-verdict routines $( [ -d skills ] && echo skills ) ) | ssh "$HOST" "tar -xf - -C '$stage'"
+( cd "$HERE" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - claude-notify routine-verdict routines ) | ssh "$HOST" "tar -xf - -C '$stage'"
 [ -z "$OVERLAY" ] || [ ! -d "$OVERLAY/routines" ] || ( cd "$OVERLAY" && COPYFILE_DISABLE=1 tar --no-xattrs -cf - routines ) | ssh "$HOST" "tar -xf - -C '$stage'"
 # The overlay's own timers (routines/systemd/*.timer, not templates) are armed below like the housekeeping ones;
 # without this an overlay timer was copied to /etc/systemd/system and never enabled.
@@ -192,16 +193,10 @@ rmdir /etc/systemd/system/claude-remote-update.service.d 2>/dev/null || true
 for f in "$r"/jobs/*.md; do put 644 "/home/claude-agent/agent-jobs/$(basename "$f")" "$f" claude-agent; done
 [ ! -f "$r/husky/init.sh" ] || put 644 /home/claude-agent/.config/husky/init.sh "$r/husky/init.sh" claude-agent
 for f in "$r"/ready/*.py; do n=$(basename "$f"); case "$n" in test_*) continue;; esac; put 755 "/home/claude-agent/work/$n" "$f" claude-agent; done
-# Skills: every skills/<name>/ of this repo goes into each claude-agent profile's skills folder (skipped when the checkout has none).
-for s in "$STAGE"/skills/*/; do
-  [ -d "$s" ] || continue
-  for cfg in /home/claude-agent/.claude /home/claude-agent/.claude-alt /home/claude-agent/.claude-alt2; do
-    [ -L "$cfg/skills" ] && continue  # a linked skills folder belongs to whatever tool made the link
-    d="$cfg/skills/$(basename "$s")"
-    diff -rq "$s" "$d" >/dev/null 2>&1 && continue
-    [ ! -d "$d" ] || rm -r -- "$d"
-    mkdir -p "$cfg/skills"; cp -r "$s" "$d"; chown claude-agent:claude-agent "$cfg/skills"; chown -R claude-agent:claude-agent "$d"; echo "  wrote $d"
-  done
+# Retired 2026-11-27: the routine job files became skills (overlay routines/skills/, synced by sync-agent-rules
+# into /opt/agent-rules/skills-routines). Only definition-of-done.md and founder-actions.md stay in agent-jobs.
+for n in bh-morning bh-task bh-client founderos-run oplify-run oplify-task; do
+  f=/home/claude-agent/agent-jobs/$n.md; [ ! -e "$f" ] || { rm -f "$f"; echo "  removed $f (now the $n skill)"; }
 done
 rm -r "$STAGE"
 
