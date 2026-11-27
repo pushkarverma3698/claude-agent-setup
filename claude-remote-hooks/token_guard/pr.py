@@ -34,8 +34,11 @@ def check_pr_create(cmd, cwd):
     m = re.search(r"(?<![\w-])(?:--base|-B)[ =]['\"]?([^\s'\"]+)", args)
     if not m or m.group(1) not in PR_BASES[repo]:
         deny(f"PRs in {repo} target `{PR_BASES[repo][0]}`: add `--base {PR_BASES[repo][0]}`.")
-    if m.group(1) == "production":
-        return  # the nightly promotion PR (beta -> production) is a checklist, never merged by an agent
+    if m.group(1) != PR_BASES[repo][0]:
+        # A PR to a later base (beta -> production, beta -> main) is a promotion: it carries work that already passed
+        # its own task PR, so it has no task sections. 2026-11-27: only `production` was exempt, so FounderOS
+        # promotions to `main` were refused.
+        return
     body = cmd
     f = re.search(r"(?<![\w-])(?:--body-file|-F)[ =]['\"]?([^\s'\"]+)", args)
     if f:
